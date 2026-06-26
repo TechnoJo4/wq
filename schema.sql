@@ -1,0 +1,26 @@
+CREATE TABLE itemtype(type TEXT PRIMARY KEY NOT NULL);
+INSERT INTO itemtype (type) VALUES ('task');
+
+CREATE TABLE linktype(type TEXT PRIMARY KEY NOT NULL, back TEXT NOT NULL);
+INSERT INTO linktype (type, back) VALUES ('blocks', 'blocked-by');
+
+CREATE TABLE item(
+    id INTEGER PRIMARY KEY NOT NULL,
+    state TEXT NOT NULL,
+    type TEXT NOT NULL,
+    name TEXT NOT NULL,
+    description TEXT NOT NULL,
+    FOREIGN KEY (type) REFERENCES itemtype (type)
+) STRICT;
+CREATE INDEX item_state ON item(state, type);
+
+CREATE TABLE link(
+    type TEXT NOT NULL,
+    a INTEGER NOT NULL,
+    b INTEGER NOT NULL,
+    PRIMARY KEY (a, b),
+    FOREIGN KEY (type) REFERENCES linktype (type),
+    FOREIGN KEY (a) REFERENCES item (id),
+    FOREIGN KEY (b) REFERENCES item (id)
+) STRICT;
+CREATE INDEX backlinks ON link(b, type, a);

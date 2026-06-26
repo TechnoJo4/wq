@@ -1,0 +1,4 @@
+usage: wq <command> options...
+
+commands:
+    TODO

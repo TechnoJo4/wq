@@ -28,7 +28,7 @@ if (typeof cmd !== "string" || cmd === "help") { await help(); Deno.exit(); } el
     db.exec("pragma journal_mode = WAL;");
     db.exec(await fs.readFile(resolve(src, "schema.sql"), { encoding: "utf-8" }));
     copy(resolve(src, "validator.default"), resolve(wqd, "validator"));
-    fs.chmod("775", resolve(wqd, "validator"));
+    await fs.chmod(resolve(wqd, "validator"), "775");
     console.error(`init: created ${wqd}`);
     Deno.exit();
 }

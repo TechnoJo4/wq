@@ -102,7 +102,7 @@ const cmds = {
             statuses: statuses.join("|"),
             linkArgs: linkTypes.map(([a,b]) => `--${a} <id> --${b} <id>`).join("  ")
         };
-        console.log(await Deno.readTextFile(resolve(src, "usage.txt"))
+        console.log(await Deno.readTextFile(resolve(src, "PRIMER.md"))
             .then(it => it.replaceAll(/\{([^\}]+)\}/g, (_,k) => parts[k])));
     },
     "show": () => J(idArgs().map(id => show(id) || console.error(`warn: item ${id} does not exist`)).filter(it => it)),

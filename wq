@@ -45,7 +45,7 @@ const wqd = await (async () => {
 ensureAllExist(wqd, ["db", "validator"]);
 // #endregion
 // #region types
-type ItemSummary = { id: number, state: string, type: string, name: string, rel?: string };
+type ItemSummary = { id: number, state: string, type: string, name: string };
 type Item = ItemSummary & { description: string };
 type Links = Record<string, ItemSummary[]>;
 type ItemLinks = Item & { links: Links };
@@ -60,20 +60,20 @@ const db = {
     get: Q<[number, string, string, string, string], [number], Item>(
         "SELECT id, state, type, name, description FROM item WHERE id = ?",
         ([id, state, type, name, description]) => ({ id, state, type, name, description })),
-    fwd: q<[string, number, string, string, string], [number], ItemSummary>(
+    fwd: q<[string, number, string, string, string], [number], [string, ItemSummary]>(
         "SELECT link.type AS rel, item.id, item.state, item.type, item.name FROM link JOIN item ON item.id = link.b WHERE link.a = ?",
-        ([rel, id, state, type, name]) => ({ rel, id, state, type, name })),
-    bwd: q<[string, number, string, string, string], [number], ItemSummary>(
+        ([rel, id, state, type, name]) => [rel, { id, state, type, name }]),
+    bwd: q<[string, number, string, string, string], [number], [string, ItemSummary]>(
         `SELECT linktype.back AS rel, item.id, item.state, item.type, item.name FROM link
             JOIN linktype ON linktype.type = link.type JOIN item ON item.id = link.a WHERE link.b = ?`,
-        ([rel, id, state, type, name]) => ({ rel, id, state, type, name })),
+        ([rel, id, state, type, name]) => [rel, { id, state, type, name }]),
 } as const;
 const statuses = ["open","claimed","closed"]; // TODO: maybe also allow config-ing this?
 const itemTypes = q<[string], [], string>(`SELECT type FROM itemtype`, ([t]) => t)();
 const linkTypes = q<[string, string], [], [string, string]>(`SELECT type, back FROM linktype`, x => x)();
 
 const rels = (id: number) => pipe([...db.fwd(id), ...db.bwd(id)], raw => tap<Links>({}, res => {
-    for (const r of raw) (res[r.rel!] ??= []).push(tap(r, () => { delete r.rel; }))
+    for (const [rel,r] of raw) (res[rel] ??= []).push(r);
 }));
 const show = (id: number): ItemLinks | undefined => pipe(db.get(id), res => res && ({ ...res, links: rels(id) }));
 

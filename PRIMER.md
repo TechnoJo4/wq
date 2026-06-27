@@ -26,7 +26,7 @@
 
 ### Dependencies & Blocking
 - `wq link <issue> --blocked-by <depends-on>` - Add dependency (issue depends on depends-on)
-- `wq unlink <issue> <no-longer-depends-on>` - Remove link
+- `wq unlink <issue> --blocked-by <no-longer-depends-on>` - Remove link
 - `wq show <id>` - See what's blocking/blocked by this issue
 
 ## Common Workflows

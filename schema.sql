@@ -6,13 +6,13 @@ INSERT INTO linktype (type, back) VALUES ('blocks', 'blocked-by');
 
 CREATE TABLE item(
     id INTEGER PRIMARY KEY NOT NULL,
-    state TEXT NOT NULL,
     type TEXT NOT NULL,
+    status TEXT NOT NULL,
     name TEXT NOT NULL,
     description TEXT NOT NULL,
     FOREIGN KEY (type) REFERENCES itemtype (type)
 ) STRICT;
-CREATE INDEX item_state ON item(state, type);
+CREATE INDEX item_status ON item(status, type);
 
 CREATE TABLE link(
     type TEXT NOT NULL,

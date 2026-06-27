@@ -9,10 +9,10 @@ import { parseArgs } from "@std/cli/parse-args";
 // #region sanity check
 const tap = <T>(t: T, f: (t: T) => void) => { f(t); return t; };
 const pipe = <T, R>(t: T, f: (t: T) => R) => { return f(t); };
+const pose = <T extends unknown[], U extends unknown[], R>(f: (...u: U) => R, g: (...t: T) => U) => (...t: T) => f(...g(...t));
 const ensureAllExist = async (dir: string, fs: string[]) => {
-    for (const f of fs)
-        if (!await exists(resolve(dir, f)))
-            throw new Error(`expected file ${resolve(dir, f)} missing`);
+    for (const f of fs) if (!await exists(resolve(dir, f)))
+        throw new Error(`expected file ${resolve(dir, f)} to exist, is missing`);
 };
 const src = import.meta.dirname;
 if (!src) throw new Error(`failed to get import.meta.dirname`);
@@ -22,8 +22,7 @@ await ensureAllExist(src, ["PRIMER.md", "usage.txt", "validator.default", "schem
 const cmd = Deno.args.shift();
 const help = async () => console.error(await fs.readFile(resolve(src, "usage.txt"), { encoding: "utf-8" }));
 if (typeof cmd !== "string" || cmd === "help") { await help(); Deno.exit(); } else if (cmd === "init") {
-    const wqd = resolve(Deno.cwd(), ".wq") 
-    ensureDir(wqd);
+    const wqd = tap(resolve(Deno.cwd(), ".wq"), ensureDir);
     const db = new Database(resolve(wqd, "db"));
     db.exec("pragma journal_mode = WAL;");
     db.exec(await fs.readFile(resolve(src, "schema.sql"), { encoding: "utf-8" }));
@@ -36,57 +35,65 @@ if (typeof cmd !== "string" || cmd === "help") { await help(); Deno.exit(); } el
 // #region find .wq
 const wqd = await (async () => {
     let d = Deno.cwd(); let p = d;
-    do {
-        const r = resolve(d = p, ".wq");
-        if (await exists(r)) return r;
-    } while (d !== (p = resolve(d, "..")));
+    do { const r = resolve(d = p, ".wq"); if (await exists(r)) return r; } while (d !== (p = resolve(d, "..")));
     throw new Error("coulnd't find .wq");
 })();
 ensureAllExist(wqd, ["db", "validator"]);
 // #endregion
 // #region types
-type ItemSummary = { id: number, state: string, type: string, name: string };
+type ItemId = number;
+type ItemSummary = { id: ItemId, status: string, type: string, name: string };
 type Item = ItemSummary & { description: string };
 type Links = Record<string, ItemSummary[]>;
 type ItemLinks = Item & { links: Links };
 // #endregion
 // #region db
+const issueFields = ["type", "status", "name", "description"] as const;
 const conn = new Database(resolve(wqd, "db")); conn.exec("pragma foreign_keys = ON");
-const q = <TCols extends unknown[], TBind extends RestBindParameters, TRet> (query: string, f: (t: TCols) => TRet) =>
-    pipe(conn.prepare(query), stmt => (...bind: TBind) => stmt.values<TCols>(...bind).map(f));
-const Q = <TCols extends unknown[], TBind extends RestBindParameters, TRet> (query: string, f: (t: TCols) => TRet) =>
-    pipe(conn.prepare(query), stmt => (...bind: TBind) => pipe(stmt.value<TCols>(...bind), ret => ret ? f(ret) : undefined));
+const q = <TCols extends unknown[], TBind extends RestBindParameters, TRet = TCols> (query: string, f: (...t: TCols) => TRet) =>
+    pipe(conn.prepare(query), stmt => (...bind: TBind) => stmt.values<TCols>(...bind).map(col => f(...col)));
+const Q = <TCols extends unknown[], TBind extends RestBindParameters, TRet = TCols> (query: string, f: (...t: TCols) => TRet) =>
+    pipe(conn.prepare(query), stmt => (...bind: TBind) => pipe(stmt.value<TCols>(...bind), ret => ret ? f(...ret) : undefined));
+const E = <TBind extends RestBindParameters> (query: string) => pipe(conn.prepare(query), stmt => (...bind: TBind) => { stmt.run(...bind); });
 const db = {
-    get: Q<[number, string, string, string, string], [number], Item>(
-        "SELECT id, state, type, name, description FROM item WHERE id = ?",
-        ([id, state, type, name, description]) => ({ id, state, type, name, description })),
-    fwd: q<[string, number, string, string, string], [number], [string, ItemSummary]>(
-        "SELECT link.type AS rel, item.id, item.state, item.type, item.name FROM link JOIN item ON item.id = link.b WHERE link.a = ?",
-        ([rel, id, state, type, name]) => [rel, { id, state, type, name }]),
-    bwd: q<[string, number, string, string, string], [number], [string, ItemSummary]>(
-        `SELECT linktype.back AS rel, item.id, item.state, item.type, item.name FROM link
+    get: Q<[ItemId, string, string, string, string], [ItemId], Item>(
+        "SELECT id, status, type, name, description FROM item WHERE id = ?",
+        (id, status, type, name, description) => ({ id, status, type, name, description })),
+    fwd: q<[string, ItemId, string, string, string], [ItemId], [string, ItemSummary]>(
+        "SELECT link.type AS rel, item.id, item.status, item.type, item.name FROM link JOIN item ON item.id = link.b WHERE link.a = ?",
+        (rel, id, status, type, name) => [rel, { id, status, type, name }]),
+    bwd: q<[string, ItemId, string, string, string], [ItemId], [string, ItemSummary]>(
+        `SELECT linktype.back AS rel, item.id, item.status, item.type, item.name FROM link
             JOIN linktype ON linktype.type = link.type JOIN item ON item.id = link.a WHERE link.b = ?`,
-        ([rel, id, state, type, name]) => [rel, { id, state, type, name }]),
+        (rel, id, status, type, name) => [rel, { id, status, type, name }]),
+    cItem: Q<[ItemId], [string, string, string, string], ItemId>("INSERT INTO item (type, status, name, description) VALUES (?, ?, ?, ?) RETURNING id", (id) => id),
+    cLink: E<[string, ItemId, ItemId]>("INSERT INTO link (type, a, b) VALUES (?, ?, ?)"),
+    rLink: E<[string, ItemId, ItemId]>("DELETE FROM link WHERE type = ? AND a = ? AND b = ?")
 } as const;
+// #endregion
+// #region db helpers
+const binds = (f: string[], sep: string = ", ") => f.map(s => `${s} = ?`).join(sep);
 const statuses = ["open","claimed","closed"]; // TODO: maybe also allow config-ing this?
-const itemTypes = q<[string], [], string>(`SELECT type FROM itemtype`, ([t]) => t)();
-const linkTypes = q<[string, string], [], [string, string]>(`SELECT type, back FROM linktype`, x => x)();
-
+const itemTypes = q<[string], [], string>(`SELECT type FROM itemtype`, (t) => t)();
+const linkTypes = q<[string, string], [], [string, string]>(`SELECT type, back FROM linktype`, (f,b) => [f,b])();
+const backlinkTypes = Object.fromEntries(linkTypes.map((f,b) => [b,f]));
+const normalizeLink = (t: string, a: number, b: number) => t in backlinkTypes ? [backlinkTypes[t], b, a] : [t, a, b];
 const rels = (id: number) => pipe([...db.fwd(id), ...db.bwd(id)], raw => tap<Links>({}, res => {
     for (const [rel,r] of raw) (res[rel] ??= []).push(r);
 }));
 const show = (id: number): ItemLinks | undefined => pipe(db.get(id), res => res && ({ ...res, links: rels(id) }));
-
 // #endregion
 // #region main
 const args = parseArgs(Deno.args, {
-    boolean: ["human", "claim"], string: ["name", "description", "status", "type"], alias: { "h": "human" },
+    boolean: ["human", "claim"], string: issueFields, alias: { "h": "human" },
     collect: linkTypes.flat() as ["blocks", "blocked-by"], // lie to the type system or it thinks everything is arrays
 });
 const idArgs = () => {
-    args._.filter(it => typeof it !== "number").forEach(it => console.error(`err: ${it} is not a valid item id`));
+    args._.filter(it => typeof it !== "number").forEach(it => console.error(`warn: ${it} is not a valid item id`));
     return args._.filter(it => typeof it === "number");
-}
+};
+const requireDef = <T>(t: T, msg: string): NonNullable<T> => { if (t === undefined) throw new Error(msg); return t!; }
+const requireArg = <T extends keyof typeof args>(arg: T) => requireDef(args[arg], `argument ${arg} is required`);
 const J = (x: unknown) => console.log(JSON.stringify(x)); // TODO: --human
 const cmds = {
     "prime": async () => {
@@ -98,9 +105,13 @@ const cmds = {
         console.log(await fs.readFile(resolve(src, "usage.txt"), { encoding: "utf-8" })
             .then(it => it.replaceAll(/\{([^\}]+)\}/, (_,k) => parts[k])));
     },
-    "show": () => J(idArgs().map(it => show(it) || console.error(`warn: item ${it} does not exist`)).filter(it => it)),
-    "create": () => { console.error("not yet implemented") },
-    "update": () => { console.error("not yet implemented") },
+    "show": () => J(idArgs().map(id => show(id) || console.error(`warn: item ${id} does not exist`)).filter(it => it)),
+    "create": () => J(show(db.cItem(requireArg("type"), requireArg("status"), requireArg("name"), requireArg("description"))!)),
+    "update": () => pipe(pipe(issueFields.filter(k => args[k]), fields => pipe(E(`UPDATE item SET ${binds(fields)} WHERE id = ?`), stmt =>
+        pipe(fields.map(k => args[k]), vals => pose<[number], RestBindParameters, void>(stmt, id => [...vals, id])))), doUpdate =>
+            J(idArgs().map(id => { doUpdate(id); return show(id); }))),
+    "link": () => { console.error("not yet implemented") },
+    "unlink": () => { console.error("not yet implemented") },
     "list": () => { console.error("not yet implemented") },
     "ready": () => { console.error("not yet implemented") },
     "blocked": () => { console.error("not yet implemented") },

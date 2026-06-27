@@ -96,8 +96,9 @@ const idArgs = () => {
     args._.filter(it => typeof it !== "number").forEach(it => console.error(`warn: ${it} is not a valid item id`));
     return args._.filter(it => typeof it === "number");
 };
-const requireDef = <T>(t: T, msg: string): NonNullable<T> => { if (t === undefined) throw new Error(msg); return t!; }
-const requireArg = <T extends keyof typeof args>(arg: T) => requireDef(args[arg], `argument ${arg} is required`);
+const definedOf = <K extends keyof T, T>(ks: readonly K[], t: T): K[] => ks.filter(k => t[k] !== undefined);
+const assertNonNull = <T>(t: T, msg: string): NonNullable<T> => { if (t === undefined) throw new Error(msg); return t!; }
+const requireArg = <T extends keyof typeof args>(arg: T) => assertNonNull(args[arg], `argument ${arg} is required`);
 const J = (x: unknown) => console.log(JSON.stringify(x)); // TODO: --human
 const cmds = {
     "prime": async () => {
@@ -111,7 +112,7 @@ const cmds = {
     },
     "show": () => J(idArgs().map(id => show(id) || console.error(`warn: item ${id} does not exist`)).filter(it => it)),
     "create": () => J(show(db.cItem(requireArg("type"), args.status || "open", requireArg("name"), requireArg("description"))!)),
-    "update": () => pipe(pipe(issueFields.filter(k => args[k]), fields => pipe(E(`UPDATE item SET ${binds(fields)} WHERE id = ?`), stmt =>
+    "update": () => pipe(pipe(definedOf(issueFields, args), fields => pipe(E(`UPDATE item SET ${binds(fields)} WHERE id = ?`), stmt =>
         pipe(fields.map(k => args[k]), vals => pose<[number], RestBindParameters, void>(stmt, id => [...vals, id])))), doUpdate =>
             J(idArgs().map(id => { doUpdate(id); return show(id); }))),
     "link": () => { console.error("not yet implemented") },

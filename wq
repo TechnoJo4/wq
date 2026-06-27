@@ -5,17 +5,19 @@ import { parseArgs } from "@std/cli";
 import { resolve } from "@std/path";
 import { ensureDir, exists, copy } from "@std/fs";
 // #endregion
-// #region sanity check
+// #region compositions
 const tap = <T>(t: T, f: (t: T) => void) => { f(t); return t; };
 const pipe = <T, R>(t: T, f: (t: T) => R) => { return f(t); };
 const pose = <T extends unknown[], U extends unknown[], R>(f: (...u: U) => R, g: (...t: T) => U) => (...t: T) => f(...g(...t));
+// #endregion
+// #region sanity check
 const ensureAllExist = async (dir: string, fs: string[]) => {
     for (const f of fs) if (!await exists(resolve(dir, f)))
         throw new Error(`expected file ${resolve(dir, f)} to exist, is missing`);
 };
 const src = import.meta.dirname;
 if (!src) throw new Error(`failed to get import.meta.dirname`);
-await ensureAllExist(src, ["PRIMER.md", "usage.txt", "validator.default", "schema.sql"]);
+await ensureAllExist(src, ["wq", "PRIMER.md", "usage.txt", "validator.default", "schema.sql"]);
 // #endregion
 // #region help, init (commands that don't open an existing db)
 const cmd = Deno.args.shift();
@@ -47,14 +49,17 @@ type Item = ItemSummary & { description: string };
 type Links = Record<string, ItemSummary[]>;
 type ItemLinks = Item & { links: Links };
 // #endregion
-// #region db
+// #region db core
 const issueFields = ["type", "status", "name", "description"] as const;
 const conn = new Database(resolve(wqd, "db")); conn.exec("pragma foreign_keys = ON");
+const binds = (f: string[], sep: string = ", ") => f.map(s => `${s} = ?`).join(sep);
 const q = <TCols extends unknown[], TBind extends RestBindParameters, TRet = TCols> (query: string, f: (...t: TCols) => TRet) =>
     pipe(conn.prepare(query), stmt => (...bind: TBind) => stmt.values<TCols>(...bind).map(col => f(...col)));
 const Q = <TCols extends unknown[], TBind extends RestBindParameters, TRet = TCols> (query: string, f: (...t: TCols) => TRet) =>
     pipe(conn.prepare(query), stmt => (...bind: TBind) => pipe(stmt.value<TCols>(...bind), ret => ret ? f(...ret) : undefined));
 const E = <TBind extends RestBindParameters> (query: string) => pipe(conn.prepare(query), stmt => (...bind: TBind) => { stmt.run(...bind); });
+// #endregion
+// #region db statements
 const db = {
     get: Q<[ItemId, string, string, string, string], [ItemId], Item>(
         "SELECT id, status, type, name, description FROM item WHERE id = ?",
@@ -71,9 +76,8 @@ const db = {
     rLink: E<[string, ItemId, ItemId]>("DELETE FROM link WHERE type = ? AND a = ? AND b = ?")
 } as const;
 // #endregion
-// #region db helpers
-const binds = (f: string[], sep: string = ", ") => f.map(s => `${s} = ?`).join(sep);
-const statuses = ["open","claimed","closed"]; // TODO: maybe also allow config-ing this?
+// #region db
+const statuses = ["open", "claimed", "closed"]; // TODO: allow config-ing this
 const itemTypes = q<[string], [], string>(`SELECT type FROM itemtype`, (t) => t)();
 const linkTypes = q<[string, string], [], [string, string]>(`SELECT type, back FROM linktype`, (f,b) => [f,b])();
 const backlinkTypes = Object.fromEntries(linkTypes.map((f,b) => [b,f]));
@@ -98,9 +102,9 @@ const J = (x: unknown) => console.log(JSON.stringify(x)); // TODO: --human
 const cmds = {
     "prime": async () => {
         const parts: Record<string, string> = {
-            itemTypes: itemTypes.join("|"),
-            statuses: statuses.join("|"),
-            linkArgs: linkTypes.map(([a,b]) => `--${a} <id> --${b} <id>`).join("  ")
+            itemTypes: itemTypes.join("|"), statuses: statuses.join("|"),
+            linkArgs: linkTypes.map(([a,b]) => `--${a} <id> --${b} <id>`).join("  "),
+            wqSrc: resolve(src, "wq"),
         };
         console.log(await Deno.readTextFile(resolve(src, "PRIMER.md"))
             .then(it => it.replaceAll(/\{([^\}]+)\}/g, (_,k) => parts[k])));

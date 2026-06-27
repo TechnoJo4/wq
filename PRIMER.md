@@ -1,5 +1,7 @@
 # Task Management with wq
 
+wq is a CLI issue tracker. For more information, you can read its source code: `{wqSrc}`.
+
 ## Core Rules
 - **Default**: Use wq for ALL task tracking (`wq create`, `wq ready`, `wq close`)
 - **Prohibited**: Do NOT use TodoWrite, TaskCreate, or markdown files for task tracking
@@ -13,11 +15,11 @@
 - `wq ready` - Show issues ready to work (no blockers)
 - `wq list --status=open` - All open issues
 - `wq list --status=claimed` - Your active work
-- `wq list --name=\"keyword\"` - Search issues
+- `wq list --name="keyword"` - Search issues
 - `wq show <id>` - Detailed issue view with links
 
 ### Creating & Updating
-- `wq create --name=\"Summary of this issue\" --description=\"Why this issue exists and what needs to be done\" --type={itemTypes}` - New issue
+- `wq create --name="Summary of this issue" --description="Why this issue exists and what needs to be done" --type={itemTypes}` - New issue
 - `wq create ... {linkArgs}` - Create with links
 - `wq update <id> --type/--name/--description` - Update fields inline
 - `wq update <id> --status={statuses}` - Forcibly set status
@@ -44,7 +46,7 @@ Before saying "done" or "complete", you MUST run this checklist:
 
 ```
 [ ] 1. run quality gates                 (tests, linters, builds when relevant)
-[ ] 2. git commit --trailer "Ref: #<id>" ()
+[ ] 2. git commit --trailer "Ref: #<id>" (commit the work with a reference to the items)
 [ ] 3. wq close <id1> <id2> ...          (close completed issues)
 [ ] 4. git status                        (ensure repo is clean)
 [ ] 5. report handoff                    (changed files, validation, etc.)

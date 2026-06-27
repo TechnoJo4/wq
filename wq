@@ -107,7 +107,7 @@ const cmds = {
             .then(it => it.replaceAll(/\{([^\}]+)\}/, (_,k) => parts[k])));
     },
     "show": () => J(idArgs().map(id => show(id) || console.error(`warn: item ${id} does not exist`)).filter(it => it)),
-    "create": () => J(show(db.cItem(requireArg("type"), requireArg("status"), requireArg("name"), requireArg("description"))!)),
+    "create": () => J(show(db.cItem(requireArg("type"), args.status || "open", requireArg("name"), requireArg("description"))!)),
     "update": () => pipe(pipe(issueFields.filter(k => args[k]), fields => pipe(E(`UPDATE item SET ${binds(fields)} WHERE id = ?`), stmt =>
         pipe(fields.map(k => args[k]), vals => pose<[number], RestBindParameters, void>(stmt, id => [...vals, id])))), doUpdate =>
             J(idArgs().map(id => { doUpdate(id); return show(id); }))),

@@ -1,9 +1,6 @@
 CREATE TABLE itemtype(type TEXT PRIMARY KEY NOT NULL);
 INSERT INTO itemtype (type) VALUES ('task');
 
-CREATE TABLE linktype(type TEXT PRIMARY KEY NOT NULL, back TEXT NOT NULL);
-INSERT INTO linktype (type, back) VALUES ('blocks', 'blocked-by');
-
 CREATE TABLE item(
     id INTEGER PRIMARY KEY NOT NULL,
     type TEXT NOT NULL,
@@ -13,6 +10,9 @@ CREATE TABLE item(
     FOREIGN KEY (type) REFERENCES itemtype (type)
 ) STRICT;
 CREATE INDEX item_status ON item(status, type);
+
+CREATE TABLE linktype(type TEXT PRIMARY KEY NOT NULL, back TEXT NOT NULL);
+INSERT INTO linktype (type, back) VALUES ('blocks', 'blocked-by'); -- a blocks b / b blocked by a
 
 CREATE TABLE link(
     type TEXT NOT NULL,

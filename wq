@@ -80,12 +80,12 @@ const db = {
 const statuses = ["open", "claimed", "closed"]; // TODO: allow config-ing this
 const itemTypes = q<[string], [], string>(`SELECT type FROM itemtype`, (t) => t)();
 const linkTypes = q<[string, string], [], [string, string]>(`SELECT type, back FROM linktype`, (f,b) => [f,b])();
-const backlinkTypes = Object.fromEntries(linkTypes.map((f,b) => [b,f]));
-const normalizeLink = (t: string, a: number, b: number) => t in backlinkTypes ? [backlinkTypes[t], b, a] : [t, a, b];
-const rels = (id: number) => pipe([...db.fwd(id), ...db.bwd(id)], raw => tap<Links>({}, res => {
+const backlinkTypes = Object.fromEntries(linkTypes.map(([f,b]) => [b,f]));
+const normalizeLink = (t: string, a: ItemId, b: ItemId): [string, ItemId, ItemId] => t in backlinkTypes ? [backlinkTypes[t], b, a] : [t, a, b];
+const rels = (id: ItemId) => pipe([...db.fwd(id), ...db.bwd(id)], raw => tap<Links>({}, res => {
     for (const [rel,r] of raw) (res[rel] ??= []).push(r);
 }));
-const show = (id: number): ItemLinks | undefined => pipe(db.get(id), res => res && ({ ...res, links: rels(id) }));
+const show = (id: ItemId): ItemLinks | undefined => pipe(db.get(id), res => res && ({ ...res, links: rels(id) }));
 // #endregion
 // #region validator
 const runValidator = async (id: ItemId): Promise<boolean> => {
@@ -112,14 +112,16 @@ const args = parseArgs(Deno.args, {
     boolean: ["human", "claim"], string: issueFields, alias: { "h": "human" },
     collect: linkTypes.flat() as ["blocks", "blocked-by"], // lie to the type system or it thinks everything is arrays
 });
-const idArgs = () => {
-    args._.filter(it => typeof it !== "number").forEach(it => console.error(`warn: ${it} is not a valid item id`));
-    return args._.filter(it => typeof it === "number");
+const itemIdsIn = (xs: (number | string)[]): ItemId[] => {
+    xs.filter(it => typeof it !== "number").forEach(it => console.error(`warn: ${it} is not a valid item id`));
+    return xs.filter(it => typeof it === "number");
 };
 const definedOf = <K extends keyof T, T>(ks: readonly K[], t: T): K[] => ks.filter(k => t[k] !== undefined);
 const assertNonNull = <T>(t: T, msg: string): NonNullable<T> => { if (t === undefined) throw new Error(msg); return t!; }
 const requireArg = <T extends keyof typeof args>(arg: T) => assertNonNull(args[arg], `argument ${arg} is required`);
 const J = (x: unknown) => console.log(JSON.stringify(x)); // TODO: --human
+const linkArgs = (as: ItemId[]) => pipe(definedOf(linkTypes.flat(), args).flatMap(t => itemIdsIn(args[t] as string[]).map<[string,ItemId]>(b => [t,b])), tbs =>
+    as.flatMap(a => tbs.map(([t,b]) => normalizeLink(t,a,b))));
 // #endregion
 // #region main
 const cmds = {
@@ -132,13 +134,14 @@ const cmds = {
         console.log(await Deno.readTextFile(resolve(src, "PRIMER.md"))
             .then(it => it.replaceAll(/\{([^\}]+)\}/g, (_,k) => parts[k])));
     },
-    "show": () => J(idArgs().map(id => show(id) || console.error(`warn: item ${id} does not exist`)).filter(it => it)),
-    "create": () => validate(() => [db.cItem(requireArg("type"), args.status || "open", requireArg("name"), requireArg("description"))!]).then(([id]) => J(show(id))),
+    "show": () => J(itemIdsIn(args._).map(id => show(id) || console.error(`warn: item ${id} does not exist`)).filter(it => it)),
+    "create": () => validate(() => pipe(db.cItem(requireArg("type"), args.status || "open", requireArg("name"), requireArg("description"))!, id =>
+        tap([id], as => linkArgs(as).forEach(l => db.cLink(...l))))).then(([id]) => J(show(id))),
     "update": () => pipe(pipe(definedOf(issueFields, args), fields => pipe(E(`UPDATE item SET ${binds(fields)} WHERE id = ?`), stmt =>
         pipe(fields.map(k => args[k]), vals => pose<[number], RestBindParameters, void>(stmt, id => [...vals, id])))), doUpdate =>
-            validate(() => idArgs().map(id => tap(id, doUpdate))).then(ids => J(ids.map(show)))),
-    "link": () => { console.error("not yet implemented") },
-    "unlink": () => { console.error("not yet implemented") },
+            validate(() => itemIdsIn(args._).map(id => tap(id, doUpdate))).then(ids => J(ids.map(show)))),
+    "link": () => linkArgs(itemIdsIn(args._)).forEach(l => db.cLink(...l)),
+    "unlink": () => linkArgs(itemIdsIn(args._)).forEach(l => db.rLink(...l)),
     "list": () => { console.error("not yet implemented") },
     "ready": () => { console.error("not yet implemented") },
     "blocked": () => { console.error("not yet implemented") },

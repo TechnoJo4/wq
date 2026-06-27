@@ -1,6 +1,6 @@
 #!/usr/bin/env -S deno run -A
 // #region imports
-import { Database, RestBindParameters } from "@db/sqlite";
+import { Database, type RestBindParameters } from "@db/sqlite";
 import { parseArgs } from "@std/cli";
 import { resolve } from "@std/path";
 import { ensureDir, exists, copy } from "@std/fs";
@@ -87,7 +87,26 @@ const rels = (id: number) => pipe([...db.fwd(id), ...db.bwd(id)], raw => tap<Lin
 }));
 const show = (id: number): ItemLinks | undefined => pipe(db.get(id), res => res && ({ ...res, links: rels(id) }));
 // #endregion
-// #region main
+// #region validator
+const runValidator = async (id: ItemId): Promise<boolean> => {
+    const p = new Deno.Command(resolve(wqd, "validator"),
+        { cwd: wqd, stdin: "piped", stdout: "piped", stderr: "inherit" }).spawn();
+    p.stdin.getWriter().write(new TextEncoder().encode(JSON.stringify(show(id))));
+    const { success } = await p.output();
+    return success;
+};
+const validate = async (f: () => ItemId[]): Promise<ItemId[]> => {
+    try {
+        conn.exec("BEGIN");
+        const ids = f();
+        for (const id of ids)
+            if (!(await runValidator(id))) { conn.exec("ROLLBACK"); Deno.exit(1); }
+        conn.exec("COMMIT");
+        return ids;
+    } catch (e) { conn.exec("ROLLBACK"); throw e; };
+};
+// #endregion
+// #region arg parsing
 const args = parseArgs(Deno.args, {
     boolean: ["human", "claim"], string: issueFields, alias: { "h": "human" },
     collect: linkTypes.flat() as ["blocks", "blocked-by"], // lie to the type system or it thinks everything is arrays
@@ -100,6 +119,8 @@ const definedOf = <K extends keyof T, T>(ks: readonly K[], t: T): K[] => ks.filt
 const assertNonNull = <T>(t: T, msg: string): NonNullable<T> => { if (t === undefined) throw new Error(msg); return t!; }
 const requireArg = <T extends keyof typeof args>(arg: T) => assertNonNull(args[arg], `argument ${arg} is required`);
 const J = (x: unknown) => console.log(JSON.stringify(x)); // TODO: --human
+// #endregion
+// #region main
 const cmds = {
     "prime": async () => {
         const parts: Record<string, string> = {
@@ -111,18 +132,16 @@ const cmds = {
             .then(it => it.replaceAll(/\{([^\}]+)\}/g, (_,k) => parts[k])));
     },
     "show": () => J(idArgs().map(id => show(id) || console.error(`warn: item ${id} does not exist`)).filter(it => it)),
-    "create": () => J(show(db.cItem(requireArg("type"), args.status || "open", requireArg("name"), requireArg("description"))!)),
+    "create": () => validate(() => [db.cItem(requireArg("type"), args.status || "open", requireArg("name"), requireArg("description"))!]).then(([id]) => J(show(id))),
     "update": () => pipe(pipe(definedOf(issueFields, args), fields => pipe(E(`UPDATE item SET ${binds(fields)} WHERE id = ?`), stmt =>
         pipe(fields.map(k => args[k]), vals => pose<[number], RestBindParameters, void>(stmt, id => [...vals, id])))), doUpdate =>
-            J(idArgs().map(id => { doUpdate(id); return show(id); }))),
+            validate(() => idArgs().map(id => tap(id, doUpdate))).then(ids => J(ids.map(show)))),
     "link": () => { console.error("not yet implemented") },
     "unlink": () => { console.error("not yet implemented") },
     "list": () => { console.error("not yet implemented") },
     "ready": () => { console.error("not yet implemented") },
     "blocked": () => { console.error("not yet implemented") },
-    "claim": () => { console.error("not yet implemented") },
-    "unclaim": () => { console.error("not yet implemented") },
-    "close": () => { console.error("not yet implemented") },
+    "claim": () => { args.status = "claimed"; cmds["update"](); }, "close": () => { args.status = "closed"; cmds["update"](); },
 };
 if (cmd in cmds) await cmds[cmd as keyof typeof cmds](); else await help();
 // #endregion

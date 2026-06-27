@@ -1,0 +1,4 @@
+#!/usr/bin/env -S deno run
+const input: { name: string } = await new Response(Deno.stdin.readable).json();
+const err = (msg: string) => { console.error("err: "+msg); Deno.exit(1); }
+if (input.name.length > 100) err("name must be under 100 characters long");

@@ -26,7 +26,7 @@ if (typeof cmd !== "string" || cmd === "help") { await help(); Deno.exit(); } el
     const db = new Database(resolve(wqd, "db"));
     db.exec("pragma journal_mode = WAL;");
     db.exec(await Deno.readTextFile(resolve(src, "schema.sql")));
-    copy(resolve(src, "validator.default"), resolve(wqd, "validator"));
+    await copy(resolve(src, "validator.default"), resolve(wqd, "validator"));
     await Deno.chmod(resolve(wqd, "validator"), 0o775);
     console.error(`init: created ${wqd}`);
     Deno.exit();

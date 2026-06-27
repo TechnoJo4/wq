@@ -103,7 +103,7 @@ const cmds = {
             linkArgs: linkTypes.map(([a,b]) => `--${a} <id> --${b} <id>`).join("  ")
         };
         console.log(await Deno.readTextFile(resolve(src, "usage.txt"))
-            .then(it => it.replaceAll(/\{([^\}]+)\}/, (_,k) => parts[k])));
+            .then(it => it.replaceAll(/\{([^\}]+)\}/g, (_,k) => parts[k])));
     },
     "show": () => J(idArgs().map(id => show(id) || console.error(`warn: item ${id} does not exist`)).filter(it => it)),
     "create": () => J(show(db.cItem(requireArg("type"), args.status || "open", requireArg("name"), requireArg("description"))!)),

@@ -91,10 +91,10 @@ const show = (id: number): ItemLinks | undefined => pipe(db.get(id), res => res 
 const runValidator = async (id: ItemId): Promise<boolean> => {
     const p = new Deno.Command(resolve(wqd, "validator"),
         { cwd: wqd, stdin: "piped", stdout: "piped", stderr: "inherit" }).spawn();
-    await p.stdin.getWriter().write(new TextEncoder().encode(JSON.stringify(show(id))));
-    await p.stdin.close();
-    const { success } = await p.output();
-    return success;
+    const w = p.stdin.getWriter();
+    await w.write(new TextEncoder().encode(JSON.stringify(show(id))));
+    w.releaseLock(); await p.stdin.close();
+    return (await p.output()).success;
 };
 const validate = async (f: () => ItemId[]): Promise<ItemId[]> => {
     try {

@@ -75,8 +75,8 @@ const db = {
     cItem: Q<[ItemId], [string, string, string, string], ItemId>((id) => id, "INSERT INTO item (type, status, name, description) VALUES (?, ?, ?, ?) RETURNING id"),
     cLink: E<[string, ItemId, ItemId]>("INSERT INTO link (type, a, b) VALUES (?, ?, ?)"),
     rLink: E<[string, ItemId, ItemId]>("DELETE FROM link WHERE type = ? AND a = ? AND b = ?"),
-    itemsLinked: (back: boolean, without: boolean) => q<[ItemId, string, string, string, string], [string, string], Item>(dbAdapt.get,
-        `SELECT id, ${issueFields.join(", ")} FROM item WHERE status = ? AND ${without ? "NOT" : ""} EXISTS(
+    itemsLinked: (back: boolean, without: boolean) => q<[ItemId, string, string, string], [string, string], ItemSummary>(dbAdapt.summ,
+        `SELECT id, type, status, name FROM item WHERE status = ? AND ${without ? "NOT" : ""} EXISTS(
             SELECT 1 FROM link JOIN item linked ON linked.id = link.${back ? "a": "b"} WHERE link.type = ? AND ${back ? "b": "a"} = item.id AND linked.status != 'closed')`)
 } as const;
 // #endregion

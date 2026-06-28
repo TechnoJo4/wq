@@ -76,11 +76,12 @@ const db = {
     cLink: E<[string, ItemId, ItemId]>("INSERT INTO link (type, a, b) VALUES (?, ?, ?)"),
     rLink: E<[string, ItemId, ItemId]>("DELETE FROM link WHERE type = ? AND a = ? AND b = ?"),
     itemsLinked: (back: boolean, without: boolean) => q<[ItemId, string, string, string, string], [string, string], Item>(dbAdapt.get,
-        `SELECT id, ${issueFields.join(", ")} FROM item WHERE status = ? AND ${without ? "NOT" : ""} EXISTS(SELECT 1 FROM link WHERE type = ? AND ${back ? "b": "a"} = item.id)`)
+        `SELECT id, ${issueFields.join(", ")} FROM item WHERE status = ? AND ${without ? "NOT" : ""} EXISTS(
+            SELECT 1 FROM link JOIN item linked ON linked.id = link.${back ? "a": "b"} WHERE link.type = ? AND ${back ? "b": "a"} = item.id AND linked.status != 'closed')`)
 } as const;
 // #endregion
 // #region db
-const statuses = ["open", "claimed", "closed"]; // TODO: allow config-ing this
+const statuses = ["open", "claimed", "closed"]; // TODO: allow config-ing this, un-hardcode defaults
 const itemTypes = q<[string], [], string>((t) => t, `SELECT type FROM itemtype`)();
 const linkTypes = pipe(q<[string, string], [], [string, string]>((f,b) => [f,b], `SELECT type, back FROM linktype`)(), lt => {
     const symm = new Set(lt.filter(([f,b]) => f === b).map(([f]) => f));
@@ -145,8 +146,9 @@ const cmds = {
             doUpdate => validate(() => itemIdsIn(args._).map(id => tap(id, doUpdate))).then(ids => J(ids.map(show)))),
     "link": () => validate(() => tap(itemIdsIn(args._), as => linkArgs(as).forEach(l => db.cLink(...l)))).then(ids => J(ids.map(show))),
     "unlink": () => validate(() => tap(itemIdsIn(args._), as => linkArgs(as).forEach(l => db.rLink(...l)))).then(ids => J(ids.map(show))),
-    "list": () => pipe(definedOf(["type","status"], args), fields => pipe(q(dbAdapt.summ, `SELECT id, type, status, name FROM item WHERE ${binds(fields, " AND ")}`),
-        stmt => J(stmt(...fields.map(k => args[k]))))), // TODO: search by link, --name/--description LIKE %%
+    "list": () => pipe(definedOf(["type","status"], args), fields => pipe(q(dbAdapt.summ,
+        `SELECT id, type, status, name FROM item ${fields.length ? "WHERE " : ""}${binds(fields, " AND ")}`),
+            stmt => J(stmt(...fields.map(k => args[k]))))), // TODO: search by link, --name/--description LIKE %%
     "ready": () => pipe(args["link-type"], t => J(db.itemsLinked(t in linkTypes.back, true)(args.status || "open", t))),
     "blocked": () => pipe(args["link-type"], t => J(db.itemsLinked(t in linkTypes.back, false)(args.status || "open", t))),
     "claim": () => { args.status = "claimed"; cmds["update"](); }, "close": () => { args.status = "closed"; cmds["update"](); },

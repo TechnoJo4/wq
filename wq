@@ -76,7 +76,7 @@ const db = {
     cLink: E<[string, ItemId, ItemId]>("INSERT INTO link (type, a, b) VALUES (?, ?, ?)"),
     rLink: E<[string, ItemId, ItemId]>("DELETE FROM link WHERE type = ? AND a = ? AND b = ?"),
     itemsLinked: (back: boolean, without: boolean) => q<[ItemId, string, string, string, string], [string, string], Item>(dbAdapt.get,
-        `SELECT id, ${issueFields.join(", ")} FROM item WHERE status = ? AND ${without ? "NOT" : ""} EXISTS(SELECT 1 FROM link WHERE type = ? AND ${back ? "a": "b"} = item.id)`)
+        `SELECT id, ${issueFields.join(", ")} FROM item WHERE status = ? AND ${without ? "NOT" : ""} EXISTS(SELECT 1 FROM link WHERE type = ? AND ${back ? "b": "a"} = item.id)`)
 } as const;
 // #endregion
 // #region db

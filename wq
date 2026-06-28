@@ -134,9 +134,8 @@ const linkArgs = (as: ItemId[]) => pipe(definedOf([...linkTypes.set], args).flat
 // #region main
 const cmds = {
     "prime": () => pipe<Record<string, string>, Promise<void>>({
-            itemTypes: itemTypes.join("|"), statuses: statuses.join("|"),
-            linkArgs: linkTypes.raw.map(([a,b]) => `--${a} <id> --${b} <id>`).join("  "),
-            wqSrc: resolve(src, "wq"),
+            itemTypes: itemTypes.join("|"), statuses: statuses.join("|"), wqSrc: resolve(src, "wq"),
+            linkArgs: linkTypes.raw.map(([a,b]) => `--${a} <id>` + (a !== b ? ` --${b} <id>` : "")).join("  "),
         }, parts => Deno.readTextFile(resolve(src, "PRIMER.md")).then(it => it.replaceAll(/\{([^\}]+)\}/g, (_,k) => parts[k])).then(x => console.log(x))),
     "show": () => J(itemIdsIn(args._).map(id => show(id) || console.error(`warn: item ${id} does not exist`)).filter(it => it)),
     "create": () => validate(() => pipe(db.cItem(requireArg("type"), args.status || "open", requireArg("name"), requireArg("description"))!,

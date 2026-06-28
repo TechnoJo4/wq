@@ -18,7 +18,7 @@ CREATE TABLE link(
     type TEXT NOT NULL,
     a INTEGER NOT NULL,
     b INTEGER NOT NULL,
-    PRIMARY KEY (a, b),
+    PRIMARY KEY (a, type, b),
     FOREIGN KEY (type) REFERENCES linktype (type),
     FOREIGN KEY (a) REFERENCES item (id),
     FOREIGN KEY (b) REFERENCES item (id)

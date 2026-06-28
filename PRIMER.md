@@ -15,7 +15,6 @@ wq is a CLI issue tracker. For more information, you can read its source code: `
 - `wq ready` - Show issues ready to work (no blockers)
 - `wq list --status=open` - All open issues
 - `wq list --status=claimed` - Your active work
-- `wq list --name="keyword"` - Search issues
 - `wq show <id>` - Detailed issue view with links
 
 ### Creating & Updating

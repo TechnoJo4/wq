@@ -53,33 +53,35 @@ type ItemLinks = Item & { links: Links };
 const issueFields = ["type", "status", "name", "description"] as const;
 const conn = new Database(resolve(wqd, "db")); conn.exec("pragma foreign_keys = ON");
 const binds = (f: string[], sep: string = ", ") => f.map(s => `${s} = ?`).join(sep);
-const q = <TCols extends unknown[], TBind extends RestBindParameters, TRet = TCols> (query: string, f: (...t: TCols) => TRet) =>
+const q = <TCols extends unknown[], TBind extends RestBindParameters, TRet = TCols> (f: (...t: TCols) => TRet, query: string) =>
     pipe(conn.prepare(query), stmt => (...bind: TBind) => stmt.values<TCols>(...bind).map(col => f(...col)));
-const Q = <TCols extends unknown[], TBind extends RestBindParameters, TRet = TCols> (query: string, f: (...t: TCols) => TRet) =>
+const Q = <TCols extends unknown[], TBind extends RestBindParameters, TRet = TCols> (f: (...t: TCols) => TRet, query: string) =>
     pipe(conn.prepare(query), stmt => (...bind: TBind) => pipe(stmt.value<TCols>(...bind), ret => ret ? f(...ret) : undefined));
 const E = <TBind extends RestBindParameters> (query: string) => pipe(conn.prepare(query), stmt => (...bind: TBind) => { stmt.run(...bind); });
 // #endregion
 // #region db statements
+const dbAdapt = {
+    get: (id: ItemId, type: string, status: string, name: string, description: string) => ({ id, status, type, name, description }),
+    link: (rel: string, id: ItemId, status: string, type: string, name: string): [string, ItemSummary] => [rel, { id, status, type, name }]
+};
 const db = {
-    get: Q<[ItemId, string, string, string, string], [ItemId], Item>(
-        "SELECT id, status, type, name, description FROM item WHERE id = ?",
-        (id, status, type, name, description) => ({ id, status, type, name, description })),
-    fwd: q<[string, ItemId, string, string, string], [ItemId], [string, ItemSummary]>(
-        "SELECT link.type AS rel, item.id, item.status, item.type, item.name FROM link JOIN item ON item.id = link.b WHERE link.a = ?",
-        (rel, id, status, type, name) => [rel, { id, status, type, name }]),
-    bwd: q<[string, ItemId, string, string, string], [ItemId], [string, ItemSummary]>(
+    get: Q<[ItemId, string, string, string, string], [ItemId], Item>(dbAdapt.get, `SELECT id, ${issueFields.join(", ")} FROM item WHERE id = ?`),
+    fwd: q<[string, ItemId, string, string, string], [ItemId], [string, ItemSummary]>(dbAdapt.link,
+        "SELECT link.type AS rel, item.id, item.status, item.type, item.name FROM link JOIN item ON item.id = link.b WHERE link.a = ?"),
+    bwd: q<[string, ItemId, string, string, string], [ItemId], [string, ItemSummary]>(dbAdapt.link,
         `SELECT linktype.back AS rel, item.id, item.status, item.type, item.name FROM link
-            JOIN linktype ON linktype.type = link.type JOIN item ON item.id = link.a WHERE link.b = ?`,
-        (rel, id, status, type, name) => [rel, { id, status, type, name }]),
-    cItem: Q<[ItemId], [string, string, string, string], ItemId>("INSERT INTO item (type, status, name, description) VALUES (?, ?, ?, ?) RETURNING id", (id) => id),
+            JOIN linktype ON linktype.type = link.type JOIN item ON item.id = link.a WHERE link.b = ?`),
+    cItem: Q<[ItemId], [string, string, string, string], ItemId>((id) => id, "INSERT INTO item (type, status, name, description) VALUES (?, ?, ?, ?) RETURNING id"),
     cLink: E<[string, ItemId, ItemId]>("INSERT INTO link (type, a, b) VALUES (?, ?, ?)"),
-    rLink: E<[string, ItemId, ItemId]>("DELETE FROM link WHERE type = ? AND a = ? AND b = ?")
+    rLink: E<[string, ItemId, ItemId]>("DELETE FROM link WHERE type = ? AND a = ? AND b = ?"),
+    itemsLinked: (back: boolean, without: boolean) => q<[ItemId, string, string, string, string], [string, string], Item>(dbAdapt.get,
+        `SELECT id, ${issueFields.join(", ")} FROM item WHERE status = ? AND ${without ? "NOT" : ""} EXISTS(SELECT 1 FROM link WHERE type = ? AND ${back ? "a": "b"} = item.id)`)
 } as const;
 // #endregion
 // #region db
 const statuses = ["open", "claimed", "closed"]; // TODO: allow config-ing this
-const itemTypes = q<[string], [], string>(`SELECT type FROM itemtype`, (t) => t)();
-const linkTypes = q<[string, string], [], [string, string]>(`SELECT type, back FROM linktype`, (f,b) => [f,b])();
+const itemTypes = q<[string], [], string>((t) => t, `SELECT type FROM itemtype`)();
+const linkTypes = q<[string, string], [], [string, string]>((f,b) => [f,b], `SELECT type, back FROM linktype`)();
 const backlinkTypes = Object.fromEntries(linkTypes.map(([f,b]) => [b,f]));
 const normalizeLink = (t: string, a: ItemId, b: ItemId): [string, ItemId, ItemId] => t in backlinkTypes ? [backlinkTypes[t], b, a] : [t, a, b];
 const rels = (id: ItemId) => pipe([...db.fwd(id), ...db.bwd(id)], raw => tap<Links>({}, res => {
@@ -109,12 +111,12 @@ const validate = async (f: () => ItemId[]): Promise<ItemId[]> => {
 // #endregion
 // #region arg parsing
 const args = parseArgs(Deno.args, {
-    boolean: ["human", "claim"], string: issueFields, alias: { "h": "human" },
+    boolean: ["human", "claim"], string: [...issueFields, "link-type"], alias: { "h": "human" }, default: { "link-type": "blocked-by" },
     collect: linkTypes.flat() as ["blocks", "blocked-by"], // lie to the type system or it thinks everything is arrays
 });
 const itemIdsIn = (xs: (number | string)[]): ItemId[] => {
     xs.filter(it => typeof it !== "number").forEach(it => console.error(`warn: ${it} is not a valid item id`));
-    return xs.filter(it => typeof it === "number");
+    return tap(xs.filter(it => typeof it === "number"), ids => ids.length || console.error(`warn: no valid item id arguments`));
 };
 const definedOf = <K extends keyof T, T>(ks: readonly K[], t: T): K[] => ks.filter(k => t[k] !== undefined);
 const assertNonNull = <T>(t: T, msg: string): NonNullable<T> => { if (t === undefined) throw new Error(msg); return t!; }
@@ -140,11 +142,11 @@ const cmds = {
     "update": () => pipe(pipe(definedOf(issueFields, args), fields => pipe(E(`UPDATE item SET ${binds(fields)} WHERE id = ?`), stmt =>
         pipe(fields.map(k => args[k]), vals => pose<[number], RestBindParameters, void>(stmt, id => [...vals, id])))), doUpdate =>
             validate(() => itemIdsIn(args._).map(id => tap(id, doUpdate))).then(ids => J(ids.map(show)))),
-    "link": () => linkArgs(itemIdsIn(args._)).forEach(l => db.cLink(...l)),
-    "unlink": () => linkArgs(itemIdsIn(args._)).forEach(l => db.rLink(...l)),
-    "list": () => { console.error("not yet implemented") },
-    "ready": () => { console.error("not yet implemented") },
-    "blocked": () => { console.error("not yet implemented") },
+    "link": () => validate(() => tap(itemIdsIn(args._), as => linkArgs(as).forEach(l => db.cLink(...l)))).then(ids => J(ids.map(show))),
+    "unlink": () => validate(() => tap(itemIdsIn(args._), as => linkArgs(as).forEach(l => db.rLink(...l)))).then(ids => J(ids.map(show))),
+    "list": () => console.error(`not yet implemented (use sqlite3 on ${resolve(wqd, "db")} directly for now)`),
+    "ready": () => pipe(args["link-type"], t => J(db.itemsLinked(t in backlinkTypes, true)(args.status || "open", t))),
+    "blocked": () => pipe(args["link-type"], t => J(db.itemsLinked(t in backlinkTypes, false)(args.status || "open", t))),
     "claim": () => { args.status = "claimed"; cmds["update"](); }, "close": () => { args.status = "closed"; cmds["update"](); },
 };
 if (cmd in cmds) await cmds[cmd as keyof typeof cmds](); else await help();

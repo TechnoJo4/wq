@@ -36,7 +36,7 @@ wq is a CLI issue tracker. For more information, you can read its source code: `
 **Starting work:**
 ```bash
 wq ready      # Find available work
-wq show <id>  # Review issue details
+wq show <id>  # Review an issue's details
 wq claim <id> # Claim it
 ```
 
@@ -46,7 +46,7 @@ Before saying "done" or "complete", you MUST run this checklist:
 
 ```
 [ ] 1. run quality gates                 (tests, linters, builds when relevant)
-[ ] 2. git commit --trailer "Ref: #<id>" (commit the work with a reference to the items)
+[ ] 2. git commit --trailer "Ref: #<id>" (commit the work, referencing items)
 [ ] 3. wq close <id1> <id2> ...          (close completed issues)
 [ ] 4. git status                        (ensure repo is clean)
 [ ] 5. report handoff                    (changed files, validation, etc.)

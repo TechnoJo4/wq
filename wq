@@ -48,6 +48,8 @@ type ItemSummary = { id: ItemId, status: string, type: string, name: string };
 type Item = ItemSummary & { description: string };
 type Links = Record<string, ItemSummary[]>;
 type ItemLinks = Item & { links: Links };
+type SingleOrArray<T> = T | T[];
+type Output = SingleOrArray<ItemSummary | ItemLinks>;
 // #endregion
 // #region db core
 const issueFields = ["type", "status", "name", "description"] as const;
@@ -83,7 +85,7 @@ const db = {
 // #region db
 const statuses = ["open", "claimed", "closed"]; // TODO: allow config-ing this, un-hardcode defaults
 const itemTypes = q<[string], [], string>((t) => t, `SELECT type FROM itemtype`)();
-const linkTypes = pipe(q<[string, string], [], [string, string]>((f,b) => [f,b], `SELECT type, back FROM linktype`)(), lt => {
+const linkTypes = pipe(q<[string, string], [], [string, string]>((f,b) => [f,b], `SELECT type, back, acyclic FROM linktype`)(), lt => {
     const symm = new Set(lt.filter(([f,b]) => f === b).map(([f]) => f));
     const back = Object.fromEntries(lt.filter(([f]) => !symm.has(f)).map(([f,b]) => [b,f]));
     return { raw: lt, set: new Set(lt.flat()), symm, back };
@@ -97,6 +99,7 @@ const show = (id: ItemId): ItemLinks | undefined => pipe(db.get(id), res => res 
 // #endregion
 // #region validator
 const runValidator = async (id: ItemId): Promise<boolean> => {
+    if (Deno.env.has("WQ_OVERRIDE_VALIDATION")) return Deno.env.get("WQ_OVERRIDE_VALIDATION") === "1";
     const p = new Deno.Command(resolve(wqd, "validator"),
         { cwd: wqd, stdin: "piped", stdout: "piped", stderr: "inherit" }).spawn();
     const w = p.stdin.getWriter();
@@ -124,32 +127,37 @@ const itemIdsIn = (xs: (number | string)[]): ItemId[] => {
     xs.filter(it => typeof it !== "number").forEach(it => console.error(`warn: ${it} is not a valid item id`));
     return tap(xs.filter(it => typeof it === "number"), ids => ids.length || console.error(`warn: no valid item id arguments`));
 };
+const definedIn = <T>(ts: readonly (T | undefined)[]): T[] => ts.filter(t => t !== undefined);
 const definedOf = <K extends keyof T, T>(ks: readonly K[], t: T): K[] => ks.filter(k => t[k] !== undefined);
 const assertNonNull = <T>(t: T, msg: string): NonNullable<T> => { if (t === undefined) throw new Error(msg); return t!; }
 const requireArg = <T extends keyof typeof args>(arg: T) => assertNonNull(args[arg], `argument ${arg} is required`);
-const J = (x: unknown) => console.log(JSON.stringify(x)); // TODO: --human
 const linkArgs = (as: ItemId[]) => pipe(definedOf([...linkTypes.set], args).flatMap(t => itemIdsIn(args[t] as string[]).map<[string,ItemId]>(b => [t,b])),
     tbs => as.flatMap(a => tbs.map(([t,b]) => normalizeLink(t,a,b))));
 // #endregion
 // #region main
+const indent = (s: string) => "    " + s.replaceAll("\n", "\n    ");
+const humanizeLinks = (l: Links) => Object.entries(l).map(([t,os]) => os.map(o => t + ": " + humanize(o))).join("\n");
+const humanize = (o: Output): string => Array.isArray(o) ? o.map(humanize).join("\n")
+    : `#${o.id} ${o.name} (${o.status} ${o.type})${"description" in o ? "\n\n" + indent(o.description + (Object.keys(o.links).length ? "\n\n" + humanizeLinks(o.links) : "")) + "\n" : ""}`;
+const O = (o: Output) => console.log(args.human ? humanize(o) : JSON.stringify(o));
 const cmds = {
     "prime": () => pipe<Record<string, string>, Promise<void>>({
             itemTypes: itemTypes.join("|"), statuses: statuses.join("|"), wqSrc: resolve(src, "wq"),
             linkArgs: linkTypes.raw.map(([a,b]) => `--${a} <id>` + (a !== b ? ` --${b} <id>` : "")).join("  "),
         }, parts => Deno.readTextFile(resolve(src, "PRIMER.md")).then(it => it.replaceAll(/\{([^\}]+)\}/g, (_,k) => parts[k])).then(x => console.log(x))),
-    "show": () => J(itemIdsIn(args._).map(id => show(id) || console.error(`warn: item ${id} does not exist`)).filter(it => it)),
+    "show": () => O(itemIdsIn(args._).map(id => show(id) || console.error(`warn: item ${id} does not exist`)).filter<ItemLinks>(it => it !== undefined)),
     "create": () => validate(() => pipe(db.cItem(requireArg("type"), args.status || "open", requireArg("name"), requireArg("description"))!,
-        id => tap([id], as => linkArgs(as).forEach(l => db.cLink(...l))))).then(([id]) => J(show(id))),
+        id => tap([id], as => linkArgs(as).forEach(l => db.cLink(...l))))).then(([id]) => O(show(id)!)),
     "update": () => pipe(pipe(definedOf(issueFields, args), fields => pipe(E(`UPDATE item SET ${binds(fields)} WHERE id = ?`),
         stmt => pipe(fields.map(k => args[k]), vals => pose<[number], RestBindParameters, void>(stmt, id => [...vals, id])))),
-            doUpdate => validate(() => itemIdsIn(args._).map(id => tap(id, doUpdate))).then(ids => J(ids.map(show)))),
-    "link": () => validate(() => tap(itemIdsIn(args._), as => linkArgs(as).forEach(l => db.cLink(...l)))).then(ids => J(ids.map(show))),
-    "unlink": () => validate(() => tap(itemIdsIn(args._), as => linkArgs(as).forEach(l => db.rLink(...l)))).then(ids => J(ids.map(show))),
+            doUpdate => validate(() => itemIdsIn(args._).map(id => tap(id, doUpdate))).then(ids => O(definedIn(ids.map(show))))),
+    "link": () => validate(() => tap(itemIdsIn(args._), as => linkArgs(as).forEach(l => db.cLink(...l)))).then(ids => O(definedIn(ids.map(show)))),
+    "unlink": () => validate(() => tap(itemIdsIn(args._), as => linkArgs(as).forEach(l => db.rLink(...l)))).then(ids => O(definedIn(ids.map(show)))),
     "list": () => pipe(definedOf(["type","status"], args), fields => pipe(q(dbAdapt.summ,
         `SELECT id, type, status, name FROM item ${fields.length ? "WHERE " : ""}${binds(fields, " AND ")}`),
-            stmt => J(stmt(...fields.map(k => args[k]))))), // TODO: search by link, --name/--description LIKE %%
-    "ready": () => pipe(args["link-type"], t => pipe(t in linkTypes.back, back => J(db.itemsLinked(back, true)(args.status || "open", back ? linkTypes.back[t] : t)))),
-    "blocked": () => pipe(args["link-type"], t => pipe(t in linkTypes.back, back => J(db.itemsLinked(back, false)(args.status || "open", back ? linkTypes.back[t] : t)))),
+            stmt => O(stmt(...fields.map(k => args[k]))))), // TODO: search by link, --name/--description LIKE %%
+    "ready": () => pipe(args["link-type"], t => pipe(t in linkTypes.back, back => O(db.itemsLinked(back, true)(args.status || "open", back ? linkTypes.back[t] : t)))),
+    "blocked": () => pipe(args["link-type"], t => pipe(t in linkTypes.back, back => O(db.itemsLinked(back, false)(args.status || "open", back ? linkTypes.back[t] : t)))),
     "claim": () => { args.status = "claimed"; cmds["update"](); }, "close": () => { args.status = "closed"; cmds["update"](); },
 };
 if (cmd in cmds) await cmds[cmd as keyof typeof cmds](); else await help();

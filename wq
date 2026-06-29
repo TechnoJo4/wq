@@ -140,7 +140,7 @@ const humanizeLinks = (l: Links) => Object.entries(l).map(([t,os]) => os.map(o =
 const humanize = (o: Output): string => Array.isArray(o) ? o.map(humanize).join("\n")
     : `#${o.id} ${o.name} (${o.status} ${o.type})${"description" in o ? "\n\n" + indent(o.description + (Object.keys(o.links).length ? "\n\n" + humanizeLinks(o.links) : "")) + "\n" : ""}`;
 const O = (o: Output) => console.log(args.human ? humanize(o) : JSON.stringify(o));
-const cmds = {
+const cmds: Record<string, () => void | Promise<void>> = {
     "prime": () => pipe<Record<string, string>, Promise<void>>({
             itemTypes: itemTypes.join("|"), statuses: statuses.join("|"), wqSrc: resolve(src, "wq"),
             linkArgs: linkTypes.raw.map(([a,b]) => `--${a} <id>` + (a !== b ? ` --${b} <id>` : "")).join("  "),
@@ -160,5 +160,6 @@ const cmds = {
     "blocked": () => pipe(args["link-type"], t => pipe(t in linkTypes.back, back => O(db.itemsLinked(back, false)(args.status || "open", back ? linkTypes.back[t] : t)))),
     "claim": () => { args.status = "claimed"; cmds["update"](); }, "close": () => { args.status = "closed"; cmds["update"](); },
 };
-if (cmd in cmds) await cmds[cmd as keyof typeof cmds](); else await help();
+const aliases: Record<string, string> = {"view": "show", "add": "create", "edit": "update", "modify": "update"};
+if (cmd in aliases) await cmds[aliases[cmd]](); else if (cmd in cmds) await cmds[cmd](); else await help();
 // #endregion

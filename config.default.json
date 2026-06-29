@@ -1,0 +1,7 @@
+{
+    "defaults": {
+        "create": { "type":"task" },
+        "ready": { "link-type": "blocked-by" },
+        "blocked": { "link-type": "blocked-by" }
+    }
+}

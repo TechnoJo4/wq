@@ -140,7 +140,7 @@ const linkArgs = (as: ItemId[]) => pipe(definedOf([...linkTypes.set], args).flat
 // #endregion
 // #region main
 const indent = (s: string) => "    " + s.replaceAll("\n", "\n    ");
-const humanizeLinks = (l: Links) => Object.entries(l).map(([t,os]) => os.map(o => t + ": " + humanize(o))).join("\n");
+const humanizeLinks = (l: Links) => Object.entries(l).flatMap(([t,os]) => os.map(o => t + ": " + humanize(o))).join("\n");
 const humanize = (o: Output): string => Array.isArray(o) ? o.map(humanize).join("\n")
     : `#${o.id} ${o.name} (${o.status} ${o.type})${"description" in o ? "\n\n" + indent(o.description + (Object.keys(o.links).length ? "\n\n" + humanizeLinks(o.links) : "")) + "\n" : ""}`;
 const O = (o: Output) => console.log(args.human ? humanize(o) : JSON.stringify(o));

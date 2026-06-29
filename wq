@@ -20,7 +20,8 @@ if (!src) throw new Error(`failed to get import.meta.dirname`);
 await ensureAllExist(src, ["wq", "PRIMER.md", "usage.txt", "validator.default", "schema.sql"]);
 // #endregion
 // #region help, init (commands that don't open an existing db)
-const cmd = Deno.args.shift();
+const aliases: Record<string, string> = {"view": "show", "add": "create", "edit": "update", "modify": "update"};
+const cmd = pipe(Deno.args.shift(), it => it && it in aliases ? aliases[it] : it);
 const help = async () => console.error(await Deno.readTextFile(resolve(src, "usage.txt")));
 if (typeof cmd !== "string" || cmd === "help") { await help(); Deno.exit(); } else if (cmd === "init") {
     const wqd = resolve(Deno.cwd(), ".wq");
@@ -30,6 +31,7 @@ if (typeof cmd !== "string" || cmd === "help") { await help(); Deno.exit(); } el
     db.exec(await Deno.readTextFile(resolve(src, "schema.sql")));
     await copy(resolve(src, "validator.default"), resolve(wqd, "validator"));
     await Deno.chmod(resolve(wqd, "validator"), 0o775);
+    await copy(resolve(src, "config.default.json"), resolve(wqd, "config.json"));
     console.error(`init: created ${wqd}`);
     Deno.exit();
 }
@@ -40,7 +42,7 @@ const wqd = await (async () => {
     do { const r = resolve(d = p, ".wq"); if (await exists(r)) return r; } while (d !== (p = resolve(d, "..")));
     throw new Error("coulnd't find .wq");
 })();
-ensureAllExist(wqd, ["db", "validator"]);
+ensureAllExist(wqd, ["db", "validator", "config.json"]);
 // #endregion
 // #region types
 type ItemId = number;
@@ -79,16 +81,16 @@ const db = {
     rLink: E<[string, ItemId, ItemId]>("DELETE FROM link WHERE type = ? AND a = ? AND b = ?"),
     itemsLinked: (back: boolean, without: boolean) => q<[ItemId, string, string, string], [string, string], ItemSummary>(dbAdapt.summ,
         `SELECT id, type, status, name FROM item WHERE status = ? AND ${without ? "NOT" : ""} EXISTS(
-            SELECT 1 FROM link JOIN item linked ON linked.id = link.${back ? "a": "b"} WHERE link.type = ? AND ${back ? "b": "a"} = item.id AND linked.status != 'closed')`)
+            SELECT 1 FROM link JOIN item linked ON linked.id = link.${back ? "a": "b"} WHERE link.type = ? AND ${back ? "b": "a"} = item.id AND linked.status != 'closed')`),
 } as const;
 // #endregion
 // #region db
 const statuses = ["open", "claimed", "closed"]; // TODO: allow config-ing this, un-hardcode defaults
 const itemTypes = q<[string], [], string>((t) => t, `SELECT type FROM itemtype`)();
-const linkTypes = pipe(q<[string, string], [], [string, string]>((f,b) => [f,b], `SELECT type, back, acyclic FROM linktype`)(), lt => {
+const linkTypes = pipe(q<[string, string], []>((f,b) => [f,b], `SELECT type, back FROM linktype`)(), lt => {
     const symm = new Set(lt.filter(([f,b]) => f === b).map(([f]) => f));
     const back = Object.fromEntries(lt.filter(([f]) => !symm.has(f)).map(([f,b]) => [b,f]));
-    return { raw: lt, set: new Set(lt.flat()), symm, back };
+    return { raw: lt, set: new Set(lt.map(([f,b]) => [f,b]).flat()), symm, back };
 });
 const normalizeLink = (t: string, a: ItemId, b: ItemId): [string, ItemId, ItemId] =>
     t in linkTypes.back ? [linkTypes.back[t], b, a] : linkTypes.symm.has(t) ? a < b ? [t, a, b] : [t, b, a] : [t, a, b];
@@ -119,9 +121,11 @@ const validate = async (f: () => ItemId[]): Promise<ItemId[]> => {
 };
 // #endregion
 // #region arg parsing
+const config = JSON.parse(await Deno.readTextFile(resolve(wqd, "config.json")));
+const defaults = ("defaults" in config && cmd in config.defaults) ? config.defaults[cmd] : {};
 const args = parseArgs(Deno.args, {
-    boolean: ["human", "claim"], string: [...issueFields, "link-type"], alias: { "h": "human" }, default: { "link-type": "blocked-by" },
-    collect: [...linkTypes.set] as ["blocks", "blocked-by"], // lie to the type system or it thinks everything is arrays
+    boolean: ["human"], string: [...issueFields, "link-type"], alias: { "h": "human" }, collect: [...linkTypes.set] as ["blocks", "blocked-by"],
+    default: defaults as { "link-type": "blocked-by" },
 });
 const itemIdsIn = (xs: (number | string)[]): ItemId[] => {
     xs.filter(it => typeof it !== "number").forEach(it => console.error(`warn: ${it} is not a valid item id`));
@@ -160,6 +164,5 @@ const cmds: Record<string, () => void | Promise<void>> = {
     "blocked": () => pipe(args["link-type"], t => pipe(t in linkTypes.back, back => O(db.itemsLinked(back, false)(args.status || "open", back ? linkTypes.back[t] : t)))),
     "claim": () => { args.status = "claimed"; cmds["update"](); }, "close": () => { args.status = "closed"; cmds["update"](); },
 };
-const aliases: Record<string, string> = {"view": "show", "add": "create", "edit": "update", "modify": "update"};
-if (cmd in aliases) await cmds[aliases[cmd]](); else if (cmd in cmds) await cmds[cmd](); else await help();
+if (cmd in cmds) await cmds[cmd](); else await help();
 // #endregion

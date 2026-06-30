@@ -1,7 +1,7 @@
 {
     "defaults": {
-        "create": { "type":"task" },
-        "ready": { "link-type": "blocked-by" },
-        "blocked": { "link-type": "blocked-by" }
+        "create": { "type": "task", "status": "open" },
+        "ready": { "link-type": "blocked-by", "status": "open" },
+        "blocked": { "link-type": "blocked-by", "status": "open" }
     }
 }

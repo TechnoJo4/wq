@@ -10,20 +10,18 @@ const tap = <T>(t: T, f: (t: T) => void) => { f(t); return t; };
 const pipe = <T, R>(t: T, f: (t: T) => R) => { return f(t); };
 const pose = <T extends unknown[], U extends unknown[], R>(f: (...u: U) => R, g: (...t: T) => U) => (...t: T) => f(...g(...t));
 // #endregion
-// #region sanity check
-const ensureAllExist = async (dir: string, fs: string[]) => {
-    for (const f of fs) if (!await exists(resolve(dir, f)))
-        throw new Error(`expected file ${resolve(dir, f)} to exist, is missing`);
-};
-const src = import.meta.dirname;
-if (!src) throw new Error(`failed to get import.meta.dirname`);
-await ensureAllExist(src, ["wq", "PRIMER.md", "usage.txt", "validator.default", "schema.sql"]);
-// #endregion
 // #region help, init (commands that don't open an existing db)
 const aliases: Record<string, string> = {"view": "show", "add": "create", "edit": "update", "modify": "update"};
 const cmd = pipe(Deno.args.shift(), it => it && it in aliases ? aliases[it] : it);
-const help = async () => console.error(await Deno.readTextFile(resolve(src, "usage.txt")));
-if (typeof cmd !== "string" || cmd === "help") { await help(); Deno.exit(); } else if (cmd === "init") {
+const src = import.meta.dirname; if (!src) err(`failed to get import.meta.dirname`);
+const help = () => console.error(Deno.readTextFileSync(resolve(src!, "usage.txt")));
+function err(msg: string, printUsage: boolean = false): never { console.error("err: " + msg); if (printUsage) help(); Deno.exit(1); }
+const ensureAllExist = async (dir: string, fs: string[]) => {
+    for (const f of fs) if (!await exists(resolve(dir, f)))
+        err(`expected file ${resolve(dir, f)} to exist, is missing`);
+};
+await ensureAllExist(src, ["wq", "PRIMER.md", "usage.txt", "validator.default", "schema.sql"]);
+if (typeof cmd !== "string" || cmd === "help") { help(); Deno.exit(); } else if (cmd === "init") {
     const wqd = resolve(Deno.cwd(), ".wq");
     await ensureDir(wqd);
     const db = new Database(resolve(wqd, "db"));
@@ -40,9 +38,9 @@ if (typeof cmd !== "string" || cmd === "help") { await help(); Deno.exit(); } el
 const wqd = await (async () => {
     let d = Deno.cwd(); let p = d;
     do { const r = resolve(d = p, ".wq"); if (await exists(r)) return r; } while (d !== (p = resolve(d, "..")));
-    throw new Error("coulnd't find .wq");
+    err("coulnd't find .wq");
 })();
-ensureAllExist(wqd, ["db", "validator", "config.json"]);
+await ensureAllExist(wqd, ["db", "validator", "config.json"]);
 // #endregion
 // #region types
 type ItemId = number;
@@ -133,10 +131,11 @@ const itemIdsIn = (xs: (number | string)[]): ItemId[] => {
 };
 const definedIn = <T>(ts: readonly (T | undefined)[]): T[] => ts.filter(t => t !== undefined);
 const definedOf = <K extends keyof T, T>(ks: readonly K[], t: T): K[] => ks.filter(k => t[k] !== undefined);
-const assertNonNull = <T>(t: T, msg: string): NonNullable<T> => { if (t === undefined) throw new Error(msg); return t!; }
+const assertNonNull = <T>(t: T, msg: string): NonNullable<T> => { if (t === undefined) err(msg, true); return t!; }
 const requireArg = <T extends keyof typeof args>(arg: T) => assertNonNull(args[arg], `argument ${arg} is required`);
 const linkArgs = (as: ItemId[]) => pipe(definedOf([...linkTypes.set], args).flatMap(t => itemIdsIn(args[t] as string[]).map<[string,ItemId]>(b => [t,b])),
     tbs => as.flatMap(a => tbs.map(([t,b]) => normalizeLink(t,a,b))));
+const requireLinkArgs = (as: ItemId[]) => tap(linkArgs(as), r => { if (r.length === 0) err("no link arguments", true); });
 // #endregion
 // #region main
 const indent = (s: string) => "    " + s.replaceAll("\n", "\n    ");
@@ -150,19 +149,19 @@ const cmds: Record<string, () => void | Promise<void>> = {
             linkArgs: linkTypes.raw.map(([a,b]) => `--${a} <id>` + (a !== b ? ` --${b} <id>` : "")).join("  "),
         }, parts => Deno.readTextFile(resolve(src, "PRIMER.md")).then(it => it.replaceAll(/\{([^\}]+)\}/g, (_,k) => parts[k])).then(x => console.log(x))),
     "show": () => O(itemIdsIn(args._).map(id => show(id) || console.error(`warn: item ${id} does not exist`)).filter<ItemLinks>(it => it !== undefined)),
-    "create": () => validate(() => pipe(db.cItem(requireArg("type"), args.status || "open", requireArg("name"), requireArg("description"))!,
+    "create": () => validate(() => pipe(db.cItem(requireArg("type"), requireArg("status"), requireArg("name"), requireArg("description"))!,
         id => tap([id], as => linkArgs(as).forEach(l => db.cLink(...l))))).then(([id]) => O(show(id)!)),
     "update": () => pipe(pipe(definedOf(issueFields, args), fields => pipe(E(`UPDATE item SET ${binds(fields)} WHERE id = ?`),
         stmt => pipe(fields.map(k => args[k]), vals => pose<[number], RestBindParameters, void>(stmt, id => [...vals, id])))),
             doUpdate => validate(() => itemIdsIn(args._).map(id => tap(id, doUpdate))).then(ids => O(definedIn(ids.map(show))))),
-    "link": () => validate(() => tap(itemIdsIn(args._), as => linkArgs(as).forEach(l => db.cLink(...l)))).then(ids => O(definedIn(ids.map(show)))),
-    "unlink": () => validate(() => tap(itemIdsIn(args._), as => linkArgs(as).forEach(l => db.rLink(...l)))).then(ids => O(definedIn(ids.map(show)))),
+    "link": () => validate(() => tap(itemIdsIn(args._), as => requireLinkArgs(as).forEach(l => db.cLink(...l)))).then(ids => O(definedIn(ids.map(show)))),
+    "unlink": () => validate(() => tap(itemIdsIn(args._), as => requireLinkArgs(as).forEach(l => db.rLink(...l)))).then(ids => O(definedIn(ids.map(show)))),
     "list": () => pipe(definedOf(["type","status"], args), fields => pipe(q(dbAdapt.summ,
         `SELECT id, type, status, name FROM item ${fields.length ? "WHERE " : ""}${binds(fields, " AND ")}`),
             stmt => O(stmt(...fields.map(k => args[k]))))), // TODO: search by link, --name/--description LIKE %%
-    "ready": () => pipe(args["link-type"], t => pipe(t in linkTypes.back, back => O(db.itemsLinked(back, true)(args.status || "open", back ? linkTypes.back[t] : t)))),
-    "blocked": () => pipe(args["link-type"], t => pipe(t in linkTypes.back, back => O(db.itemsLinked(back, false)(args.status || "open", back ? linkTypes.back[t] : t)))),
+    "ready": () => pipe(args["link-type"], t => pipe(t in linkTypes.back, back => O(db.itemsLinked(back, true)(requireArg("status"), back ? linkTypes.back[t] : t)))),
+    "blocked": () => pipe(args["link-type"], t => pipe(t in linkTypes.back, back => O(db.itemsLinked(back, false)(requireArg("status"), back ? linkTypes.back[t] : t)))),
     "claim": () => { args.status = "claimed"; cmds["update"](); }, "close": () => { args.status = "closed"; cmds["update"](); },
 };
-if (cmd in cmds) await cmds[cmd](); else await help();
+if (cmd in cmds) await cmds[cmd](); else help();
 // #endregion

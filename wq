@@ -7,8 +7,7 @@ import { ensureDir, exists, copy } from "@std/fs";
 // #endregion
 // #region compositions
 const tap = <T>(t: T, f: (t: T) => void) => { f(t); return t; };
-const pipe = <T, R>(t: T, f: (t: T) => R) => { return f(t); };
-const pose = <T extends unknown[], U extends unknown[], R>(f: (...u: U) => R, g: (...t: T) => U) => (...t: T) => f(...g(...t));
+const pipe = <T, R>(t: T, f: (t: T) => R): T extends undefined ? R | undefined : R => t === undefined ? undefined! : f(t);
 // #endregion
 // #region help, init (commands that don't open an existing db)
 const aliases: Record<string, string> = {"view": "show", "add": "create", "edit": "update", "modify": "update"};
@@ -54,7 +53,6 @@ type Output = SingleOrArray<ItemSummary | ItemLinks>;
 // #region db core
 const issueFields = ["type", "status", "name", "description"] as const;
 const conn = new Database(resolve(wqd, "db")); conn.exec("pragma foreign_keys = ON");
-const binds = (f: string[], sep: string = ", ") => f.map(s => `${s} = ?`).join(sep);
 const q = <TCols extends unknown[], TBind extends RestBindParameters, TRet = TCols> (f: (...t: TCols) => TRet, query: string) =>
     pipe(conn.prepare(query), stmt => (...bind: TBind) => stmt.values<TCols>(...bind).map(col => f(...col)));
 const Q = <TCols extends unknown[], TBind extends RestBindParameters, TRet = TCols> (f: (...t: TCols) => TRet, query: string) =>
@@ -151,14 +149,16 @@ const cmds: Record<string, () => void | Promise<void>> = {
     "show": () => O(itemIdsIn(args._).map(id => show(id) || console.error(`warn: item ${id} does not exist`)).filter<ItemLinks>(it => it !== undefined)),
     "create": () => validate(() => pipe(db.cItem(requireArg("type"), requireArg("status"), requireArg("name"), requireArg("description"))!,
         id => tap([id], as => linkArgs(as).forEach(l => db.cLink(...l))))).then(([id]) => O(show(id)!)),
-    "update": () => pipe(pipe(definedOf(issueFields, args), fields => pipe(E(`UPDATE item SET ${binds(fields)} WHERE id = ?`),
-        stmt => pipe(fields.map(k => args[k]), vals => pose<[number], RestBindParameters, void>(stmt, id => [...vals, id])))),
+    "update": () => pipe(pipe(definedOf(issueFields, args), fields => pipe(E(`UPDATE item SET ${fields.map(f => `${f} = ?`).join(",")} WHERE id = ?`),
+        stmt => pipe(fields.map(k => args[k]), vals => (id: ItemId) => stmt(...vals, id)))),
             doUpdate => validate(() => itemIdsIn(args._).map(id => tap(id, doUpdate))).then(ids => O(definedIn(ids.map(show))))),
     "link": () => validate(() => tap(itemIdsIn(args._), as => requireLinkArgs(as).forEach(l => db.cLink(...l)))).then(ids => O(definedIn(ids.map(show)))),
     "unlink": () => validate(() => tap(itemIdsIn(args._), as => requireLinkArgs(as).forEach(l => db.rLink(...l)))).then(ids => O(definedIn(ids.map(show)))),
-    "list": () => pipe(definedOf(["type","status"], args), fields => pipe(q(dbAdapt.summ,
-        `SELECT id, type, status, name FROM item ${fields.length ? "WHERE " : ""}${binds(fields, " AND ")}`),
-            stmt => O(stmt(...fields.map(k => args[k]))))), // TODO: search by link, --name/--description LIKE %%
+    "list": () => {
+        const c = pipe(<[string, string[] | undefined][]>[ ["type IN (?)", args["type"]?.split(",")], ["status IN (?)", args["status"]?.split(",")],
+            ["name LIKE ?", pipe(args["name"], it => [`%${it}%`])], ["description LIKE ?", pipe(args["description"], it => [`%${it}%`])] ], it => it.filter(([_,v]) => v));
+        O(q(dbAdapt.summ, `SELECT id, type, status, name FROM item ${c.length ? "WHERE " : ""}${c.map(([c]) => c).join(" AND ")}`)(...c.flatMap(([_,v]) => v)));
+    },
     "ready": () => pipe(args["link-type"], t => pipe(t in linkTypes.back, back => O(db.itemsLinked(back, true)(requireArg("status"), back ? linkTypes.back[t] : t)))),
     "blocked": () => pipe(args["link-type"], t => pipe(t in linkTypes.back, back => O(db.itemsLinked(back, false)(requireArg("status"), back ? linkTypes.back[t] : t)))),
     "claim": () => { args.status = "claimed"; cmds["update"](); }, "close": () => { args.status = "closed"; cmds["update"](); },

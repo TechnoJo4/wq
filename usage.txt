@@ -4,18 +4,18 @@ commands:
     help
         print this documentation
     prime
-        print documentation with project-specific information and instructions
+        print documentation with project-specific instructions and examples
     show    <id1> [<id2> ...]
         print items including description and links
-    list                           [--type=<item-type>] [--status=<status>]
+    list                           [--name=<keyword>] [--description=<keyword>] [--type=<item-type>[,<item-type>]] [--status=<status>[,<status>]]
         print item summaries
     create                         --name=<name> --description=<description> [--type=<type>] [--status=<status>]
         create an item (defaults: open task)
     update  <id1> [<id2> ...]      [--type=<type>] [--status=<status>] [--name=<name>] [--description=<description>]
         modify an item
-    link    <src1> [<src2> ...]    --<link-type>=<target1>  --<link-type>=<target2> ...
+    link    <src1> [<src2> ...]    --<link-type>=<target1>  [--<link-type>=<target2> ...]
         link items together
-    unlink  <src1> [<src2> ...]    --<link-type>=<target1>  --<link-type>=<target2> ...
+    unlink  <src1> [<src2> ...]    --<link-type>=<target1>  [--<link-type>=<target2> ...]
         unlink items
     ready                          [--link-type=<link-type>] [--status=<status>]
         find open items without a blocked-by link to a non-closed item

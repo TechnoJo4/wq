@@ -155,7 +155,7 @@ const cmds: Record<string, () => void | Promise<void>> = {
     "link": () => validate(() => tap(itemIdsIn(args._), as => requireLinkArgs(as).forEach(l => db.cLink(...l)))).then(ids => O(definedIn(ids.map(show)))),
     "unlink": () => validate(() => tap(itemIdsIn(args._), as => requireLinkArgs(as).forEach(l => db.rLink(...l)))).then(ids => O(definedIn(ids.map(show)))),
     "list": () => {
-        const arr = (arg: string | undefined, field: string) => pipe(arg?.split(","), it => [`${field} IN (${it.map(_ => "?")}})`, it]);
+        const arr = (arg: string | undefined, field: string) => pipe(arg?.split(","), it => [`${field} IN (${it.map(_ => "?")})`, it]);
         const kwd = (arg: string | undefined, field: string) => pipe(arg, it => [`${field} LIKE ?`, [`%${it}%`]]);
         const c = definedIn([ arr(args["type"],"type"), arr(args["status"],"status"), kwd(args["name"],"name"), kwd(args["description"],"description") ] as ([string,string[]] | undefined)[]);
         O(q(dbAdapt.summ, `SELECT id, type, status, name FROM item ${c.length ? "WHERE " : ""}${c.map(([c]) => c).join(" AND ")}`)(...c.flatMap(([_,v]) => v)));

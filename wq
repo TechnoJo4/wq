@@ -7,7 +7,7 @@ import { ensureDir, exists, copy } from "@std/fs";
 // #endregion
 // #region compositions
 const tap = <T>(t: T, f: (t: T) => void) => { f(t); return t; };
-const pipe = <T, R>(t: T, f: (t: T) => R): T extends undefined ? R | undefined : R => t === undefined ? undefined! : f(t);
+const pipe = <T, R>(t: T, f: (t: NonNullable<T>) => R): T extends undefined ? R | undefined : R => t === undefined ? undefined! : f(t!);
 // #endregion
 // #region help, init (commands that don't open an existing db)
 const aliases: Record<string, string> = {"view": "show", "add": "create", "edit": "update", "modify": "update"};
@@ -155,8 +155,9 @@ const cmds: Record<string, () => void | Promise<void>> = {
     "link": () => validate(() => tap(itemIdsIn(args._), as => requireLinkArgs(as).forEach(l => db.cLink(...l)))).then(ids => O(definedIn(ids.map(show)))),
     "unlink": () => validate(() => tap(itemIdsIn(args._), as => requireLinkArgs(as).forEach(l => db.rLink(...l)))).then(ids => O(definedIn(ids.map(show)))),
     "list": () => {
-        const c = pipe(<[string, string[] | undefined][]>[ ["type IN (?)", args["type"]?.split(",")], ["status IN (?)", args["status"]?.split(",")],
-            ["name LIKE ?", pipe(args["name"], it => [`%${it}%`])], ["description LIKE ?", pipe(args["description"], it => [`%${it}%`])] ], it => it.filter(([_,v]) => v));
+        const arr = (arg: string | undefined, field: string) => pipe(arg?.split(","), it => [`${field} IN (${it.map(_ => "?")}})`, it]);
+        const kwd = (arg: string | undefined, field: string) => pipe(arg, it => [`${field} LIKE ?`, [`%${it}%`]]);
+        const c = definedIn([ arr(args["type"],"type"), arr(args["status"],"status"), kwd(args["name"],"name"), kwd(args["description"],"description") ] as ([string,string[]] | undefined)[]);
         O(q(dbAdapt.summ, `SELECT id, type, status, name FROM item ${c.length ? "WHERE " : ""}${c.map(([c]) => c).join(" AND ")}`)(...c.flatMap(([_,v]) => v)));
     },
     "ready": () => pipe(args["link-type"], t => pipe(t in linkTypes.back, back => O(db.itemsLinked(back, true)(requireArg("status"), back ? linkTypes.back[t] : t)))),

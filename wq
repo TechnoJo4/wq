@@ -127,6 +127,7 @@ const itemIdsIn = (xs: (number | string)[]): ItemId[] => {
     xs.filter(it => typeof it !== "number").forEach(it => console.error(`warn: ${it} is not a valid item id`));
     return tap(xs.filter(it => typeof it === "number"), ids => ids.length || console.error(`warn: no valid item id arguments`));
 };
+const existingItemIdsIn = (xs: (number | string)[]): ItemId[] => tap(itemIdsIn(xs), ids => ids.forEach(id => db.get(id) || err(`item ${id} does not exist`)));
 const definedIn = <T>(ts: readonly (T | undefined)[]): T[] => ts.filter(t => t !== undefined);
 const definedOf = <K extends keyof T, T>(ks: readonly K[], t: T): K[] => ks.filter(k => t[k] !== undefined);
 const assertNonNull = <T>(t: T, msg: string): NonNullable<T> => { if (t === undefined) err(msg, true); return t!; }
@@ -149,11 +150,11 @@ const cmds: Record<string, () => void | Promise<void>> = {
     "show": () => O(itemIdsIn(args._).map(id => show(id) || console.error(`warn: item ${id} does not exist`)).filter<ItemLinks>(it => it !== undefined)),
     "create": () => validate(() => pipe(db.cItem(requireArg("type"), requireArg("status"), requireArg("name"), requireArg("description"))!,
         id => tap([id], as => linkArgs(as).forEach(l => db.cLink(...l))))).then(([id]) => O(show(id)!)),
-    "update": () => pipe(pipe(definedOf(issueFields, args), fields => pipe(E(`UPDATE item SET ${fields.map(f => `${f} = ?`).join(",")} WHERE id = ?`),
-        stmt => pipe(fields.map(k => args[k]), vals => (id: ItemId) => stmt(...vals, id)))),
-            doUpdate => validate(() => itemIdsIn(args._).map(id => tap(id, doUpdate))).then(ids => O(definedIn(ids.map(show))))),
-    "link": () => validate(() => tap(itemIdsIn(args._), as => requireLinkArgs(as).forEach(l => db.cLink(...l)))).then(ids => O(definedIn(ids.map(show)))),
-    "unlink": () => validate(() => tap(itemIdsIn(args._), as => requireLinkArgs(as).forEach(l => db.rLink(...l)))).then(ids => O(definedIn(ids.map(show)))),
+    "update": () => pipe(pipe(tap(definedOf(issueFields, args), fields => fields.length || err("no update fields", true)), fields =>
+        pipe(fields.map(k => args[k]), vals => (id: ItemId) => E(`UPDATE item SET ${fields.map(f => `${f} = ?`).join(",")} WHERE id = ?`)(...vals, id))),
+            doUpdate => validate(() => existingItemIdsIn(args._).map(id => tap(id, doUpdate))).then(ids => O(definedIn(ids.map(show))))),
+    "link": () => validate(() => tap(existingItemIdsIn(args._), as => requireLinkArgs(as).forEach(l => db.cLink(...l)))).then(ids => O(definedIn(ids.map(show)))),
+    "unlink": () => validate(() => tap(existingItemIdsIn(args._), as => requireLinkArgs(as).forEach(l => db.rLink(...l)))).then(ids => O(definedIn(ids.map(show)))),
     "list": () => {
         const arr = (arg: string | undefined, field: string) => pipe(arg?.split(","), it => [`${field} IN (${it.map(_ => "?")})`, it]);
         const kwd = (arg: string | undefined, field: string) => pipe(arg, it => [`${field} LIKE ?`, [`%${it}%`]]);
@@ -162,7 +163,7 @@ const cmds: Record<string, () => void | Promise<void>> = {
     },
     "ready": () => pipe(args["link-type"], t => pipe(t in linkTypes.back, back => O(db.itemsLinked(back, true)(requireArg("status"), back ? linkTypes.back[t] : t)))),
     "blocked": () => pipe(args["link-type"], t => pipe(t in linkTypes.back, back => O(db.itemsLinked(back, false)(requireArg("status"), back ? linkTypes.back[t] : t)))),
-    "claim": () => { args.status = "claimed"; cmds["update"](); }, "close": () => { args.status = "closed"; cmds["update"](); },
+    "claim": () => { args.status = "claimed"; return cmds["update"](); }, "close": () => { args.status = "closed"; return cmds["update"](); },
 };
 if (cmd in cmds) await cmds[cmd](); else help();
 // #endregion

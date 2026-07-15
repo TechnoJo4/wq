@@ -1,4 +1,5 @@
 {
+    "validator": ["deno", "run", "validator"],
     "defaults": {
         "create": { "type": "task", "status": "open" },
         "ready": { "link-type": "blocked-by", "status": "open" },

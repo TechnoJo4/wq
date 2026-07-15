@@ -98,8 +98,8 @@ const show = (id: ItemId): ItemLinks | undefined => pipe(db.get(id), res => res 
 // #region validator
 const runValidator = async (id: ItemId): Promise<boolean> => {
     if (Deno.env.has("WQ_OVERRIDE_VALIDATION")) return Deno.env.get("WQ_OVERRIDE_VALIDATION") === "1";
-    const p = new Deno.Command(resolve(wqd, "validator"),
-        { cwd: wqd, stdin: "piped", stdout: "piped", stderr: "inherit" }).spawn();
+    const p = pipe(config.validator as string[], ([command, ...commandArgs]) => new Deno.Command(command,
+            { args: commandArgs, cwd: wqd, stdin: "piped", stdout: "piped", stderr: "inherit" }).spawn());
     const w = p.stdin.getWriter();
     await w.write(new TextEncoder().encode(JSON.stringify(show(id))));
     w.releaseLock(); await p.stdin.close();

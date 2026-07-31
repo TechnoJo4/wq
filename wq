@@ -10,8 +10,7 @@ const tap = <T>(t: T, f: (t: T) => void) => { f(t); return t; };
 const pipe = <T, R>(t: T, f: (t: NonNullable<T>) => R): T extends undefined ? R | undefined : R => t === undefined ? undefined! : f(t!);
 // #endregion
 // #region help, init (commands that don't open an existing db)
-const aliases: Record<string, string> = {"view": "show", "add": "create", "edit": "update", "modify": "update"};
-const cmd = pipe(Deno.args.shift(), it => it && it in aliases ? aliases[it] : it);
+const requestedCmd = Deno.args.shift();
 const src = import.meta.dirname; if (!src) err(`failed to get import.meta.dirname`);
 const help = () => console.error(Deno.readTextFileSync(resolve(src!, "usage.txt")));
 function err(msg: string, printUsage: boolean = false): never { console.error("err: " + msg); if (printUsage) help(); Deno.exit(1); }
@@ -20,7 +19,7 @@ const ensureAllExist = async (dir: string, fs: string[]) => {
         err(`expected file ${resolve(dir, f)} to exist, is missing`);
 };
 await ensureAllExist(src, ["wq", "PRIMER.md", "usage.txt", "validator.default", "schema.sql"]);
-if (typeof cmd !== "string" || cmd === "help") { help(); Deno.exit(); } else if (cmd === "init") {
+if (typeof requestedCmd !== "string" || requestedCmd === "help") { help(); Deno.exit(); } else if (requestedCmd === "init") {
     const wqd = resolve(Deno.cwd(), ".wq");
     await ensureDir(wqd);
     const db = new Database(resolve(wqd, "db"));
@@ -40,6 +39,12 @@ const wqd = await (async () => {
     err("coulnd't find .wq");
 })();
 await ensureAllExist(wqd, ["db", "validator", "config.json"]);
+const config = JSON.parse(await Deno.readTextFile(resolve(wqd, "config.json"))); const aliases: unknown = config.aliases ?? {};
+if (typeof aliases !== "object" || aliases === null || Array.isArray(aliases)) err("config aliases must be an object");
+const alias: unknown = Object.hasOwn(aliases, requestedCmd) ? (aliases as Record<string, unknown>)[requestedCmd] : undefined;
+if (alias !== undefined && (!Array.isArray(alias) || alias.length === 0 || alias.some(it => typeof it !== "string") || alias[0].length === 0))
+    err(`alias ${requestedCmd} must be a non-empty array of strings`);
+const [cmd, ...aliasArgs] = (alias as string[] | undefined) ?? [requestedCmd]; Deno.args.unshift(...aliasArgs);
 // #endregion
 // #region types
 type ItemId = number;
@@ -117,7 +122,6 @@ const validate = async (f: () => ItemId[]): Promise<ItemId[]> => {
 };
 // #endregion
 // #region arg parsing
-const config = JSON.parse(await Deno.readTextFile(resolve(wqd, "config.json")));
 const defaults = ("defaults" in config && cmd in config.defaults) ? config.defaults[cmd] : {};
 const args = parseArgs(Deno.args, {
     boolean: ["human"], string: [...issueFields, "link-type"], alias: { "h": "human" }, collect: [...linkTypes.set] as ["blocks", "blocked-by"],
@@ -163,7 +167,6 @@ const cmds: Record<string, () => void | Promise<void>> = {
     },
     "ready": () => pipe(args["link-type"], t => pipe(t in linkTypes.back, back => O(db.itemsLinked(back, true)(requireArg("status"), back ? linkTypes.back[t] : t)))),
     "blocked": () => pipe(args["link-type"], t => pipe(t in linkTypes.back, back => O(db.itemsLinked(back, false)(requireArg("status"), back ? linkTypes.back[t] : t)))),
-    "claim": () => { args.status = "claimed"; return cmds["update"](); }, "close": () => { args.status = "closed"; return cmds["update"](); },
 };
-if (cmd in cmds) await cmds[cmd](); else help();
+if (cmd in cmds) await cmds[cmd](); else if (alias) err(`alias ${requestedCmd} resolves to unknown command ${cmd}`, true); else help();
 // #endregion

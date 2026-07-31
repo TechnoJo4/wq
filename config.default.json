@@ -1,5 +1,13 @@
 {
     "validator": ["deno", "run", "validator"],
+    "aliases": {
+        "view": ["show"],
+        "add": ["create"],
+        "edit": ["update"],
+        "modify": ["update"],
+        "claim": ["update", "--status=claimed"],
+        "close": ["update", "--status=closed"]
+    },
     "defaults": {
         "create": { "type": "task", "status": "open" },
         "ready": { "link-type": "blocked-by", "status": "open" },

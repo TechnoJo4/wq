@@ -1,3 +1,7 @@
-/.*
 /AGENTS.md
-!/.agents/plugins/marketplace.json
+
+/.*
+
+!/.agents
+/.agents/*
+!/.agents/plugins

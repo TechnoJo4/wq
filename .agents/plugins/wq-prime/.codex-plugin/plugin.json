@@ -1,0 +1,20 @@
+{
+  "name": "wq-prime",
+  "version": "0.1.0+codex.20260715025046",
+  "description": "Automatically loads wq project guidance into every Codex context.",
+  "author": {
+    "name": "rkletr"
+  },
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "wq prime",
+    "shortDescription": "Prime Codex contexts in wq projects.",
+    "longDescription": "Runs wq prime when a Codex thread or subagent starts beneath a project containing .wq, then injects the output as developer context.",
+    "developerName": "rkletr",
+    "category": "Productivity",
+    "capabilities": [
+      "Lifecycle hooks"
+    ],
+    "defaultPrompt": "Show me the active wq workflow."
+  }
+}

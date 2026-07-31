@@ -1,6 +1,6 @@
 # Task Management with wq
 
-wq is a CLI issue tracker. For more information, you can read its source code: `{wqSrc}`.
+wq is a CLI issue tracker. For more information, run `wq help` or read its source code: `{wqSrc}`.
 
 ## Core Rules
 - **Default**: Use wq for ALL task tracking (`wq create`, `wq ready`, `wq close`)

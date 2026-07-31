@@ -81,7 +81,7 @@ const db = {
 } as const;
 // #endregion
 // #region db
-const statuses = ["open", "claimed", "closed"]; // TODO: allow config-ing this, un-hardcode defaults
+const statuses = q<[string], [], string>((s) => s, `SELECT status FROM itemstatus`)();
 const itemTypes = q<[string], [], string>((t) => t, `SELECT type FROM itemtype`)();
 const linkTypes = pipe(q<[string, string], []>((f,b) => [f,b], `SELECT type, back FROM linktype`)(), lt => {
     const symm = new Set(lt.filter(([f,b]) => f === b).map(([f]) => f));

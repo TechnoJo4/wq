@@ -1,13 +1,17 @@
 CREATE TABLE itemtype(type TEXT PRIMARY KEY NOT NULL) STRICT;
 INSERT INTO itemtype (type) VALUES ('task');
 
+CREATE TABLE itemstatus(status TEXT PRIMARY KEY NOT NULL) STRICT;
+INSERT INTO itemstatus (status) VALUES ('open'), ('claimed'), ('closed');
+
 CREATE TABLE item(
     id INTEGER PRIMARY KEY NOT NULL,
     type TEXT NOT NULL,
     status TEXT NOT NULL,
     name TEXT NOT NULL,
     description TEXT NOT NULL,
-    FOREIGN KEY (type) REFERENCES itemtype (type)
+    FOREIGN KEY (type) REFERENCES itemtype (type),
+    FOREIGN KEY (status) REFERENCES itemstatus (status)
 ) STRICT;
 CREATE INDEX item_status ON item(status, type);
 

@@ -6,11 +6,11 @@
         "edit": ["update"],
         "modify": ["update"],
         "claim": ["update", "--status=claimed"],
-        "close": ["update", "--status=closed"]
+        "close": ["update", "--status=closed"],
+        "ready": ["list", "--status=open", "--without-unclosed-link=blocked-by"],
+        "blocked": ["list", "--status=open", "--with-unclosed-link=blocked-by"]
     },
     "defaults": {
-        "create": { "type": "task", "status": "open" },
-        "ready": { "link-type": "blocked-by", "status": "open" },
-        "blocked": { "link-type": "blocked-by", "status": "open" }
+        "create": { "type": "task", "status": "open" }
     }
 }

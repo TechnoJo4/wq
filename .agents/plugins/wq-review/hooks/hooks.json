@@ -1,0 +1,19 @@
+{
+  "description": "Review submitted wq tasks after tool use.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$PLUGIN_ROOT/scripts/review.mjs\"",
+            "commandWindows": "powershell.exe -NoProfile -NonInteractive -Command \"node (Join-Path $env:PLUGIN_ROOT 'scripts/review.mjs')\"",
+            "timeout": 3600,
+            "statusMessage": "Reviewing submitted wq tasks",
+            "additionalContextLimit": 10000
+          }
+        ]
+      }
+    ]
+  }
+}

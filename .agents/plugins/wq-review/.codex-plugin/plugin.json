@@ -1,0 +1,20 @@
+{
+  "name": "wq-review",
+  "version": "0.1.0+codex.20260801192247",
+  "description": "Reviews wq submission batches before closing them.",
+  "author": {
+    "name": "rkletr"
+  },
+  "interface": {
+    "displayName": "wq review",
+    "shortDescription": "Review submitted wq tasks before closing them.",
+    "longDescription": "Runs one isolated Codex review for each submitted wq batch, then closes all accepted tasks or returns the batch to claimed.",
+    "developerName": "rkletr",
+    "category": "Productivity",
+    "capabilities": [
+      "Lifecycle hooks",
+      "Code review"
+    ],
+    "defaultPrompt": "Show me the most recent wq review."
+  }
+}

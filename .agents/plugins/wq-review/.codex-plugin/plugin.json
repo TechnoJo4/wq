@@ -1,6 +1,6 @@
 {
   "name": "wq-review",
-  "version": "0.1.0+codex.20260809162804",
+  "version": "0.1.0+codex.20260809163844",
   "description": "Reviews wq submission batches before closing them.",
   "author": {
     "name": "rkletr"

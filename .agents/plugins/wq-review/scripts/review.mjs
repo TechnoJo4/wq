@@ -33,8 +33,12 @@ const findProject = start => {
 };
 const codexExecutable = () => {
   if (process.platform !== "win32") return "codex";
-  const executable = join(process.env.CODEX_HOME || join(homedir(), ".codex"), ".sandbox-bin", "codex.exe");
-  return existsSync(executable) ? executable : "codex";
+  const root = process.env.CODEX_HOME || join(homedir(), ".codex");
+  for (const dir of [join(root, "plugins", ".plugin-appserver"), join(root, ".sandbox-bin")]) {
+    const executable = join(dir, "codex.exe");
+    if (existsSync(executable) && existsSync(join(dir, "codex-code-mode-host.exe"))) return executable;
+  }
+  return "codex";
 };
 
 let input;
@@ -119,8 +123,11 @@ try {
   const resultFile = join(runDir, "result.json");
   const childEnv = { ...process.env };
   for (const name of ["WQ_OVERRIDE_VALIDATION", "PLUGIN_ROOT", "PLUGIN_DATA", "CLAUDE_PLUGIN_ROOT", "CLAUDE_PLUGIN_DATA"]) delete childEnv[name];
+  const sandboxConfig = process.platform === "win32"
+    ? ["-c", "sandbox_mode=\"workspace-write\"", "-c", "windows.sandbox=\"elevated\""] : [];
   const reviewRun = command(codexExecutable(), [
-    "exec", "--ignore-user-config", "-c", "features.hooks=false", "--ephemeral", "--color", "never",
+    "exec", "--ignore-user-config", "--ignore-rules", "-c", "features.hooks=false",
+    ...sandboxConfig, "--ephemeral", "--color", "never",
     "--sandbox", "workspace-write", "--output-schema", join(pluginRoot, "scripts", "review.schema.json"),
     "--output-last-message", resultFile, "-",
   ], { cwd: checkout, env: childEnv, input: prompt, timeout: 3_500_000, maxBuffer: 16 * 1024 * 1024 });

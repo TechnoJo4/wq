@@ -1,5 +1,5 @@
 import { closeSync, existsSync, mkdirSync, mkdtempSync, openSync, readFileSync, rmSync, unlinkSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { homedir, tmpdir } from "node:os";
 import { dirname, join, parse, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
@@ -30,6 +30,11 @@ const findProject = start => {
     if (parent === dir || dir === parse(dir).root) return undefined;
     dir = parent;
   }
+};
+const codexExecutable = () => {
+  if (process.platform !== "win32") return "codex";
+  const executable = join(process.env.CODEX_HOME || join(homedir(), ".codex"), ".sandbox-bin", "codex.exe");
+  return existsSync(executable) ? executable : "codex";
 };
 
 let input;
@@ -114,7 +119,7 @@ try {
   const resultFile = join(runDir, "result.json");
   const childEnv = { ...process.env };
   for (const name of ["WQ_OVERRIDE_VALIDATION", "PLUGIN_ROOT", "PLUGIN_DATA", "CLAUDE_PLUGIN_ROOT", "CLAUDE_PLUGIN_DATA"]) delete childEnv[name];
-  const reviewRun = command("codex", [
+  const reviewRun = command(codexExecutable(), [
     "exec", "--ignore-user-config", "-c", "features.hooks=false", "--ephemeral", "--color", "never",
     "--sandbox", "workspace-write", "--output-schema", join(pluginRoot, "scripts", "review.schema.json"),
     "--output-last-message", resultFile, "-",

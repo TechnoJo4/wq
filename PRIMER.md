@@ -12,20 +12,24 @@ wq is a CLI issue tracker. For more information, run `wq help` or read its sourc
 ## Essential Commands
 
 ### Finding Work
+
 - `wq ready` - Show issues ready to work (no blockers)
 - `wq list --status=open` - All open issues
 - `wq list --status=claimed` - Your active work
 - `wq show <id1> <id2> ...` - Detailed issue view with links
 
 ### Creating & Updating
+
 - `wq create --name="Summary of this issue" --description="Why this issue exists and what needs to be done" --type={itemTypes}` - New issue
 - `wq create ... {linkArgs}` - Create with links
+- `wq create ... --status=claimed` - Create an issue you will immediately start working on
 - `wq update <id> --type/--name/--description` - Update fields inline
 - `wq update <id> --status={statuses}` - Forcibly set status
 - `wq claim <id1> <id2> ...` - Claim issues before starting work
 - `wq close <id1> <id2> ...` - Mark complete
 
 ### Dependencies & Blocking
+
 - `wq link <issue> --blocked-by <depends-on>` - Add dependency (issue depends on depends-on)
 - `wq unlink <issue> --blocked-by <no-longer-depends-on>` - Remove link
 - `wq show <id>` - See what's blocking/blocked by this issue
@@ -33,6 +37,7 @@ wq is a CLI issue tracker. For more information, run `wq help` or read its sourc
 ## Common Workflows
 
 **Starting work:**
+
 ```bash
 wq ready      # Find available work
 wq show <id>  # Review an issue's details

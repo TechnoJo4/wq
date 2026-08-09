@@ -1,0 +1,17 @@
+{
+    "validator": ["deno", "run", "--allow-run=wq", "validator"],
+    "aliases": {
+        "view": ["show"],
+        "add": ["create"],
+        "edit": ["update"],
+        "modify": ["update"],
+        "claim": ["update", "--status=claimed"],
+        "submit": ["update", "--status=submitted"],
+        "close": ["update", "--status=submitted"],
+        "ready": ["list", "--status=open", "--without-unclosed-link=blocked-by"],
+        "blocked": ["list", "--status=open", "--with-unclosed-link=blocked-by"]
+    },
+    "defaults": {
+        "create": { "type": "task", "status": "open" }
+    }
+}

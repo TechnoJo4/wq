@@ -1,0 +1,15 @@
+#!/usr/bin/env -S deno run --allow-run=wq
+
+type Summary = { id: number, type: string };
+type Item = Summary & { status: string, links?: Record<string, Summary[]> };
+const item: Item = await new Response(Deno.stdin.readable).json();
+const err = (message: string): never => { console.error(`err: ${message}`); Deno.exit(1); };
+if (item.type === "requirement") err("requirements may only be changed by the user");
+if (item.status === "closed") err("tasks must pass review before they can be closed");
+const prior = await new Deno.Command("wq", { args: ["list", "--type=task", "--status=submitted"], stdout: "piped" }).output();
+if (!prior.success) err("could not inspect submitted tasks");
+if (JSON.parse(new TextDecoder().decode(prior.stdout)).length)
+  err("items cannot be changed while a task is under review");
+const requirements = item.links?.satisfies;
+if (!requirements?.length || requirements.some(link => link.type !== "requirement"))
+  err("items must satisfy at least one requirement and may only satisfy requirements");

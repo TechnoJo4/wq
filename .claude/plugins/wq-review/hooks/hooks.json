@@ -1,0 +1,17 @@
+{
+  "description": "Review submitted wq tasks after tool use.",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/../../../.agents/plugins/wq-review/scripts/review.mjs\"",
+            "timeout": 3600,
+            "statusMessage": "Reviewing submitted wq tasks"
+          }
+        ]
+      }
+    ]
+  }
+}

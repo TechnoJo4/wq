@@ -1,0 +1,18 @@
+{
+  "name": "personal",
+  "owner": {
+    "name": "rkletr"
+  },
+  "plugins": [
+    {
+      "name": "wq-prime",
+      "source": "./.claude/plugins/wq-prime",
+      "category": "Productivity"
+    },
+    {
+      "name": "wq-review",
+      "source": "./.claude/plugins/wq-review",
+      "category": "Productivity"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "name": "wq-prime",
+  "version": "0.1.0",
+  "description": "Loads wq project guidance into sessions and subagents.",
+  "author": {
+    "name": "rkletr"
+  }
+}

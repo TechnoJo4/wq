@@ -45,4 +45,7 @@ if (result.error || result.status !== 0) {
   process.exit(0);
 }
 
-process.stdout.write(result.stdout);
+// claude code only injects plain stdout as context on SessionStart
+process.stdout.write(process.argv.includes("--context") ? JSON.stringify({
+  hookSpecificOutput: { hookEventName: input.hook_event_name, additionalContext: result.stdout },
+}) : result.stdout);

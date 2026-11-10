@@ -1,0 +1,8 @@
+{
+  "name": "wq-review",
+  "version": "0.1.0",
+  "description": "Reviews wq submission batches with an isolated Codex run before closing them.",
+  "author": {
+    "name": "rkletr"
+  }
+}

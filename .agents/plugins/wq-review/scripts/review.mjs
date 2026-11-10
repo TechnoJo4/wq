@@ -99,8 +99,8 @@ try {
     done();
   }
 
-  const pluginRoot = process.env.PLUGIN_ROOT || resolve(dirname(fileURLToPath(import.meta.url)), "..");
-  const dataRoot = resolve(process.env.PLUGIN_DATA || join(tmpdir(), "wq-review"));
+  const pluginRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+  const dataRoot = resolve(process.env.PLUGIN_DATA || process.env.CLAUDE_PLUGIN_DATA || join(tmpdir(), "wq-review"));
   mkdirSync(dataRoot, { recursive: true });
   runDir = mkdtempSync(join(dataRoot, "run-"));
   checkout = join(runDir, "repo");

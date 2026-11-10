@@ -1,0 +1,29 @@
+{
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear|compact",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/../../../.agents/plugins/wq-prime/scripts/prime.mjs\" --context",
+            "timeout": 30,
+            "statusMessage": "Loading wq project guidance"
+          }
+        ]
+      }
+    ],
+    "SubagentStart": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/../../../.agents/plugins/wq-prime/scripts/prime.mjs\" --context",
+            "timeout": 30,
+            "statusMessage": "Loading wq project guidance"
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -5,3 +5,7 @@
 !/.agents
 /.agents/*
 !/.agents/plugins
+!/.claude
+/.claude/*
+!/.claude/plugins
+!/.claude-plugin
